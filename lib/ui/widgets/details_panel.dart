@@ -1,19 +1,26 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../data/models/activity_item.dart';
 import '../../data/models/application.dart';
 import '../../domain/status/status_types.dart';
 
 class DetailsPanel extends StatelessWidget {
   final Application? application;
+  final List<ActivityItem> timeline;
 
-  const DetailsPanel({super.key, required this.application});
+  const DetailsPanel({
+    super.key,
+    required this.application,
+    required this.timeline,
+  });
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final dateFormat = DateFormat('yyyy-MM-dd');
     final timeFormat = DateFormat('MMM d, h:mm a');
+    final timelineFormat = DateFormat('MMM d, h:mm a');
 
     return Card(
       child: Padding(
@@ -136,6 +143,34 @@ class DetailsPanel extends StatelessWidget {
                           ),
                     ),
                   ],
+                  const SizedBox(height: 16),
+                  Divider(color: colorScheme.outlineVariant),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Timeline',
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                  const SizedBox(height: 12),
+                  if (timeline.isEmpty)
+                    Text(
+                      'No activity yet',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                    )
+                  else
+                    Column(
+                      children: [
+                        for (var i = 0; i < timeline.length; i++) ...[
+                          _TimelineItem(
+                            item: timeline[i],
+                            timeFormat: timelineFormat,
+                          ),
+                          if (i != timeline.length - 1)
+                            const SizedBox(height: 10),
+                        ],
+                      ],
+                    ),
                 ],
               ),
       ),
@@ -167,6 +202,80 @@ class _DetailRow extends StatelessWidget {
           Text(
             value,
             style: Theme.of(context).textTheme.bodyMedium,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TimelineItem extends StatelessWidget {
+  final ActivityItem item;
+  final DateFormat timeFormat;
+
+  const _TimelineItem({
+    required this.item,
+    required this.timeFormat,
+  });
+
+  Color _dotColor(ActivityKind kind, ColorScheme scheme) {
+    switch (kind) {
+      case ActivityKind.offer:
+        return scheme.tertiary;
+      case ActivityKind.rejection:
+        return scheme.error;
+      case ActivityKind.interview:
+        return scheme.secondary;
+      case ActivityKind.update:
+        return scheme.primary;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceVariant.withOpacity(0.7),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: colorScheme.outlineVariant),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(
+              color: _dotColor(item.kind, colorScheme),
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  item.title,
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  item.detail,
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            timeFormat.format(item.timestamp),
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
           ),
         ],
       ),

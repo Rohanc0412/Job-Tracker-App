@@ -10,6 +10,7 @@ class Application {
   final int confidence;
   final String account;
   final String source;
+  final String? jobId;
   final String? portalUrl;
   final String? contact;
   final String? nextStep;
@@ -25,6 +26,7 @@ class Application {
     required this.confidence,
     required this.account,
     required this.source,
+    this.jobId,
     this.portalUrl,
     this.contact,
     this.nextStep,
@@ -41,6 +43,7 @@ class Application {
     int? confidence,
     String? account,
     String? source,
+    String? jobId,
     String? portalUrl,
     String? contact,
     String? nextStep,
@@ -56,6 +59,7 @@ class Application {
       confidence: confidence ?? this.confidence,
       account: account ?? this.account,
       source: source ?? this.source,
+      jobId: jobId ?? this.jobId,
       portalUrl: portalUrl ?? this.portalUrl,
       contact: contact ?? this.contact,
       nextStep: nextStep ?? this.nextStep,

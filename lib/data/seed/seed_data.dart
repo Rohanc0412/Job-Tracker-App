@@ -1,31 +1,331 @@
 import '../models/application.dart';
+import '../models/email_event.dart';
+import '../models/interview_event.dart';
 import '../../domain/status/status_types.dart';
 
+class SeedAccount {
+  final String id;
+  final String label;
+  final String provider;
+  final DateTime createdAt;
+
+  const SeedAccount({
+    required this.id,
+    required this.label,
+    required this.provider,
+    required this.createdAt,
+  });
+}
+
+class SeedSyncState {
+  final String id;
+  final String accountLabel;
+  final String provider;
+  final String folder;
+  final String cursorKey;
+  final String cursorValue;
+  final DateTime lastSyncTime;
+
+  const SeedSyncState({
+    required this.id,
+    required this.accountLabel,
+    required this.provider,
+    required this.folder,
+    required this.cursorKey,
+    required this.cursorValue,
+    required this.lastSyncTime,
+  });
+}
+
 class SeedData {
-  static List<Application> initialApplications() {
-    return [
-      Application(
-        id: 'app_001',
-        company: 'Example Co',
-        role: 'Senior Engineer',
-        appliedOn: DateTime.now().subtract(const Duration(days: 3)),
-        lastUpdated: DateTime.now().subtract(const Duration(days: 1)),
-        status: ApplicationStatus.applied,
-        confidence: 62,
-        account: 'Gmail',
-        source: 'Company Site',
-      ),
-      Application(
-        id: 'app_002',
-        company: 'Acme Labs',
-        role: 'Platform Engineer',
-        appliedOn: DateTime.now().subtract(const Duration(days: 10)),
-        lastUpdated: DateTime.now().subtract(const Duration(days: 2)),
-        status: ApplicationStatus.interview,
-        confidence: 74,
-        account: 'Gmail',
-        source: 'LinkedIn',
-      ),
-    ];
-  }
+  static final List<SeedAccount> accounts = [
+    SeedAccount(
+      id: 'acct_gmail',
+      label: 'Gmail',
+      provider: 'gmail',
+      createdAt: DateTime(2026, 1, 1, 8, 30),
+    ),
+    SeedAccount(
+      id: 'acct_northeastern',
+      label: 'Northeastern',
+      provider: 'outlook',
+      createdAt: DateTime(2026, 1, 1, 9, 0),
+    ),
+  ];
+
+  static final List<Application> applications = [
+    Application(
+      id: 'app_001',
+      company: 'Delta Dynamics',
+      role: 'ML Engineer',
+      appliedOn: DateTime(2026, 1, 2),
+      lastUpdated: DateTime(2026, 1, 9),
+      status: ApplicationStatus.assessment,
+      confidence: 68,
+      account: 'Gmail',
+      source: 'Company Site',
+      portalUrl: 'https://jobs.deltadynamics.com/role/123',
+      contact: 'hiring@deltadynamics.com',
+      nextStep: 'Assessment review',
+      nextStepAt: DateTime(2026, 1, 12, 10, 0),
+    ),
+    Application(
+      id: 'app_002',
+      company: 'Acme Robotics',
+      role: 'Software Engineer',
+      appliedOn: DateTime(2026, 1, 3),
+      lastUpdated: DateTime(2026, 1, 8),
+      status: ApplicationStatus.interview,
+      confidence: 72,
+      account: 'Gmail',
+      source: 'LinkedIn',
+      portalUrl: 'https://jobs.acmerobotics.com/position/1234',
+      contact: 'recruiting@acmerobotics.com',
+      nextStep: 'Interview scheduled',
+      nextStepAt: DateTime(2026, 1, 15, 14, 0),
+    ),
+    Application(
+      id: 'app_003',
+      company: 'Futura Mobility',
+      role: 'Product Manager',
+      appliedOn: DateTime(2026, 1, 1),
+      lastUpdated: DateTime(2026, 1, 6),
+      status: ApplicationStatus.offer,
+      confidence: 84,
+      account: 'Northeastern',
+      source: 'Referral',
+      portalUrl: 'https://futura-mobility.com/careers/pm',
+      contact: 'talent@futura-mobility.com',
+      nextStep: 'Offer review',
+      nextStepAt: DateTime(2026, 1, 10, 9, 0),
+    ),
+    Application(
+      id: 'app_004',
+      company: 'Kestrel AI',
+      role: 'Research Engineer',
+      appliedOn: DateTime(2025, 12, 28),
+      lastUpdated: DateTime(2026, 1, 6),
+      status: ApplicationStatus.applied,
+      confidence: 58,
+      account: 'Northeastern',
+      source: 'Company Site',
+      portalUrl: 'https://kestrel.ai/jobs/research',
+      contact: 'hello@kestrel.ai',
+      nextStep: 'Awaiting response',
+    ),
+    Application(
+      id: 'app_005',
+      company: 'Cloud Harbor',
+      role: 'Backend Developer',
+      appliedOn: DateTime(2026, 1, 4),
+      lastUpdated: DateTime(2026, 1, 5),
+      status: ApplicationStatus.underReview,
+      confidence: 63,
+      account: 'Northeastern',
+      source: 'Referral',
+      portalUrl: 'https://cloudharbor.io/careers/backend',
+      contact: 'careers@cloudharbor.io',
+      nextStep: 'Under review',
+    ),
+    Application(
+      id: 'app_006',
+      company: 'Granite Systems',
+      role: 'DevOps Engineer',
+      appliedOn: DateTime(2025, 12, 20),
+      lastUpdated: DateTime(2026, 1, 3),
+      status: ApplicationStatus.received,
+      confidence: 49,
+      account: 'Gmail',
+      source: 'LinkedIn',
+      portalUrl: 'https://granitesystems.com/jobs/devops',
+      contact: 'hr@granitesystems.com',
+      nextStep: 'Resume received',
+    ),
+    Application(
+      id: 'app_007',
+      company: 'Evergreen Health',
+      role: 'QA Engineer',
+      appliedOn: DateTime(2025, 12, 20),
+      lastUpdated: DateTime(2025, 12, 26),
+      status: ApplicationStatus.rejected,
+      confidence: 31,
+      account: 'Gmail',
+      source: 'Company Site',
+      portalUrl: 'https://evergreenhealth.com/jobs/qa',
+      contact: 'talent@evergreenhealth.com',
+      nextStep: 'Closed',
+    ),
+    Application(
+      id: 'app_008',
+      company: 'Harborline Tech',
+      role: 'Frontend Engineer',
+      appliedOn: DateTime(2025, 12, 18),
+      lastUpdated: DateTime(2025, 12, 21),
+      status: ApplicationStatus.interview,
+      confidence: 66,
+      account: 'Northeastern',
+      source: 'Company Site',
+      portalUrl: 'https://harborline.tech/jobs/frontend',
+      contact: 'hello@harborline.tech',
+      nextStep: 'Interview scheduled',
+      nextStepAt: DateTime(2026, 1, 20, 15, 30),
+    ),
+  ];
+
+  static final List<EmailEvent> emailEvents = [
+    EmailEvent(
+      id: 'email_001',
+      applicationId: 'app_001',
+      accountLabel: 'Gmail',
+      provider: 'gmail',
+      folder: 'INBOX',
+      cursorValue: 'cur_1001',
+      messageId: '<msg-001@deltadynamics>',
+      subject: 'Assessment link for ML Engineer role',
+      fromAddr: 'hiring@deltadynamics.com',
+      date: DateTime(2026, 1, 9, 9, 15),
+      extractedStatus: 'assessment',
+      extractedFieldsJson: '{"assessment":"take-home"}',
+      evidenceSnippet: 'Assessment link delivered for review.',
+      hash: 'hash_email_001',
+      isSignificantUpdate: true,
+    ),
+    EmailEvent(
+      id: 'email_002',
+      applicationId: 'app_002',
+      accountLabel: 'Gmail',
+      provider: 'gmail',
+      folder: 'INBOX',
+      cursorValue: 'cur_1002',
+      messageId: '<msg-002@acmerobotics>',
+      subject: 'Interview scheduled for Software Engineer',
+      fromAddr: 'recruiting@acmerobotics.com',
+      date: DateTime(2026, 1, 8, 13, 40),
+      extractedStatus: 'interview',
+      extractedFieldsJson: '{"stage":"phone screen"}',
+      evidenceSnippet: 'Interview scheduled for Jan 15, 2:00 PM.',
+      hash: 'hash_email_002',
+      isSignificantUpdate: true,
+    ),
+    EmailEvent(
+      id: 'email_003',
+      applicationId: 'app_003',
+      accountLabel: 'Northeastern',
+      provider: 'outlook',
+      folder: 'INBOX',
+      cursorValue: 'cur_2001',
+      messageId: '<msg-003@futuramobility>',
+      subject: 'Offer details for Product Manager',
+      fromAddr: 'talent@futura-mobility.com',
+      date: DateTime(2026, 1, 6, 16, 5),
+      extractedStatus: 'offer',
+      extractedFieldsJson: '{"offer":"extended"}',
+      evidenceSnippet: 'Offer package shared and ready for review.',
+      hash: 'hash_email_003',
+      isSignificantUpdate: true,
+    ),
+    EmailEvent(
+      id: 'email_004',
+      applicationId: 'app_005',
+      accountLabel: 'Northeastern',
+      provider: 'outlook',
+      folder: 'INBOX',
+      cursorValue: 'cur_2002',
+      messageId: '<msg-004@cloudharbor>',
+      subject: 'Application moved to review',
+      fromAddr: 'careers@cloudharbor.io',
+      date: DateTime(2026, 1, 5, 11, 20),
+      extractedStatus: 'underReview',
+      extractedFieldsJson: '{"status":"under_review"}',
+      evidenceSnippet: 'Recruiter reviewed application.',
+      hash: 'hash_email_004',
+      isSignificantUpdate: true,
+    ),
+    EmailEvent(
+      id: 'email_005',
+      applicationId: 'app_006',
+      accountLabel: 'Gmail',
+      provider: 'gmail',
+      folder: 'INBOX',
+      cursorValue: 'cur_1003',
+      messageId: '<msg-005@granitesystems>',
+      subject: 'Resume received for DevOps Engineer',
+      fromAddr: 'hr@granitesystems.com',
+      date: DateTime(2026, 1, 3, 8, 45),
+      extractedStatus: 'received',
+      extractedFieldsJson: '{"status":"received"}',
+      evidenceSnippet: 'Application received and logged.',
+      hash: 'hash_email_005',
+      isSignificantUpdate: true,
+    ),
+    EmailEvent(
+      id: 'email_006',
+      applicationId: 'app_007',
+      accountLabel: 'Gmail',
+      provider: 'gmail',
+      folder: 'INBOX',
+      cursorValue: 'cur_1004',
+      messageId: '<msg-006@evergreenhealth>',
+      subject: 'Application status update',
+      fromAddr: 'talent@evergreenhealth.com',
+      date: DateTime(2025, 12, 26, 10, 10),
+      extractedStatus: 'rejected',
+      extractedFieldsJson: '{"status":"closed"}',
+      evidenceSnippet: 'Position closed.',
+      hash: 'hash_email_006',
+      isSignificantUpdate: true,
+    ),
+  ];
+
+  static final List<InterviewEvent> interviewEvents = [
+    InterviewEvent(
+      id: 'int_001',
+      applicationId: 'app_002',
+      accountLabel: 'Gmail',
+      messageId: '<msg-002@acmerobotics>',
+      startTime: DateTime(2026, 1, 15, 14, 0),
+      endTime: DateTime(2026, 1, 15, 14, 45),
+      timezone: 'America/New_York',
+      location: 'Video call',
+      meetingUrl: 'https://meet.acmerobotics.com/room/eng-123',
+      source: 'calendar',
+      confidence: 0.92,
+      createdAt: DateTime(2026, 1, 8, 13, 50),
+    ),
+    InterviewEvent(
+      id: 'int_002',
+      applicationId: 'app_008',
+      accountLabel: 'Northeastern',
+      messageId: '<msg-007@harborline>',
+      startTime: DateTime(2026, 1, 20, 15, 30),
+      endTime: DateTime(2026, 1, 20, 16, 15),
+      timezone: 'America/New_York',
+      location: 'Harborline HQ',
+      meetingUrl: 'https://harborline.tech/interviews/frontend',
+      source: 'calendar',
+      confidence: 0.88,
+      createdAt: DateTime(2026, 1, 7, 9, 15),
+    ),
+  ];
+
+  static final List<SeedSyncState> syncStates = [
+    SeedSyncState(
+      id: 'sync_001',
+      accountLabel: 'Gmail',
+      provider: 'gmail',
+      folder: 'INBOX',
+      cursorKey: 'gmail_history_id',
+      cursorValue: 'hist_1001',
+      lastSyncTime: DateTime(2026, 1, 9, 9, 30),
+    ),
+    SeedSyncState(
+      id: 'sync_002',
+      accountLabel: 'Northeastern',
+      provider: 'outlook',
+      folder: 'INBOX',
+      cursorKey: 'outlook_delta_link',
+      cursorValue: 'delta_2001',
+      lastSyncTime: DateTime(2026, 1, 6, 16, 20),
+    ),
+  ];
 }

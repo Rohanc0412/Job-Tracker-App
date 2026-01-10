@@ -347,7 +347,14 @@ class _HeaderCell extends StatelessWidget {
   Widget build(BuildContext context) {
     final content = Row(
       children: [
-        Text(label, style: textStyle),
+        Expanded(
+          child: Text(
+            label,
+            style: textStyle,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
         if (trailing != null) ...[
           const SizedBox(width: 2),
           trailing!,

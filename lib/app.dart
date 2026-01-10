@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import 'data/repo/application_repo.dart';
 import 'theme/app_theme.dart';
 import 'ui/screens/applications_screen.dart';
 import 'ui/screens/dashboard_screen.dart';
 import 'ui/screens/settings_screen.dart';
 
 class JobTrackerApp extends StatelessWidget {
-  const JobTrackerApp({super.key});
+  final ApplicationRepo? repo;
+
+  const JobTrackerApp({super.key, this.repo});
 
   @override
   Widget build(BuildContext context) {
@@ -17,16 +20,16 @@ class JobTrackerApp extends StatelessWidget {
       theme: AppTheme.dark(),
       darkTheme: AppTheme.dark(),
       themeMode: ThemeMode.dark,
-      routerConfig: _router,
+      routerConfig: _createRouter(repo),
     );
   }
 }
 
-final GoRouter _router = GoRouter(
+GoRouter _createRouter(ApplicationRepo? repo) => GoRouter(
   routes: [
     GoRoute(
       path: '/',
-      builder: (context, state) => const DashboardScreen(),
+      builder: (context, state) => DashboardScreen(repo: repo),
     ),
     GoRoute(
       path: '/applications',

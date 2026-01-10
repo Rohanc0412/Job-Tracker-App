@@ -3,7 +3,7 @@
 Local-only Flutter desktop app for tracking job applications.
 
 ## Status
-Part 1 UI implemented.
+Part 2 SQLite persistence implemented.
 
 ## Prerequisites
 - Flutter SDK 3.3+ (with desktop support enabled)
@@ -21,9 +21,16 @@ Part 1 UI implemented.
    - `flutter run -d macos`
 
 ## Local data storage
-The app will store local data in the OS application support directory:
-- Windows: `%APPDATA%\job_tracker`
-- macOS: `~/Library/Application Support/job_tracker`
+The app stores a local SQLite database in the OS application support directory:
+- Windows: `%APPDATA%\job_tracker\job_tracker.db`
+- macOS: `~/Library/Application Support/job_tracker/job_tracker.db`
+
+## Reset database
+1) Close the app.
+2) Delete the `job_tracker.db` file from the app support directory.
+
+## Tests
+- `flutter test`
 
 ## Screenshots
 - Dashboard (placeholder): `docs/screenshots/dashboard.png`
