@@ -28,36 +28,38 @@ class AppTheme {
     );
 
     final base = ThemeData.dark();
-    final textTheme = base.textTheme.copyWith(
-      titleLarge: base.textTheme.titleLarge?.copyWith(
-        fontSize: 20,
-        fontWeight: FontWeight.w600,
-        letterSpacing: 0.2,
-      ),
-      titleMedium: base.textTheme.titleMedium?.copyWith(
-        fontSize: 16,
-        fontWeight: FontWeight.w600,
-      ),
-      bodyLarge: base.textTheme.bodyLarge?.copyWith(fontSize: 15),
-      bodyMedium: base.textTheme.bodyMedium?.copyWith(fontSize: 14),
-      labelLarge: base.textTheme.labelLarge?.copyWith(
-        fontSize: 13,
-        fontWeight: FontWeight.w600,
-      ),
-      labelMedium: base.textTheme.labelMedium?.copyWith(fontSize: 12),
-    );
+    final textTheme = base.textTheme
+        .copyWith(
+          titleLarge: base.textTheme.titleLarge?.copyWith(
+            fontSize: 20,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.2,
+          ),
+          titleMedium: base.textTheme.titleMedium?.copyWith(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+          ),
+          bodyLarge: base.textTheme.bodyLarge?.copyWith(fontSize: 15),
+          bodyMedium: base.textTheme.bodyMedium?.copyWith(fontSize: 14),
+          labelLarge: base.textTheme.labelLarge?.copyWith(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+          ),
+          labelMedium: base.textTheme.labelMedium?.copyWith(fontSize: 12),
+        )
+        .apply(
+          bodyColor: colorScheme.onSurface,
+          displayColor: colorScheme.onSurface,
+          fontFamily: 'SF Pro Display',
+          fontFamilyFallback: const ['SF Pro Text', 'Segoe UI', 'Helvetica Neue'],
+        );
 
     return base.copyWith(
       useMaterial3: true,
       colorScheme: colorScheme,
-      fontFamily: 'SF Pro Display',
-      fontFamilyFallback: const ['SF Pro Text', 'Segoe UI', 'Helvetica Neue'],
       scaffoldBackgroundColor: colorScheme.background,
-      textTheme: textTheme.apply(
-        bodyColor: colorScheme.onSurface,
-        displayColor: colorScheme.onSurface,
-      ),
-      cardTheme: CardTheme(
+      textTheme: textTheme,
+      cardTheme: CardThemeData(
         color: colorScheme.surfaceVariant,
         elevation: 0,
         margin: EdgeInsets.zero,

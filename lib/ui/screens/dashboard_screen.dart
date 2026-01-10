@@ -18,6 +18,7 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
+  final ScrollController _scrollController = ScrollController();
   late final List<Application> _applications;
   Application? _selected;
 
@@ -28,6 +29,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (_applications.isNotEmpty) {
       _selected = _applications.first;
     }
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
   }
 
   @override
@@ -62,7 +69,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         final isWide = constraints.maxWidth >= 1200;
 
                         return Scrollbar(
+                          controller: _scrollController,
                           child: SingleChildScrollView(
+                            controller: _scrollController,
                             padding: const EdgeInsets.all(24),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,

@@ -178,13 +178,13 @@ class DemoData {
   static final List<ActivityItem> upcomingInterviews = [
     ActivityItem(
       title: 'Acme Robotics',
-      detail: 'Interview • Jan 15, 2:00 PM',
+      detail: 'Interview - Jan 15, 2:00 PM',
       timestamp: DateTime(2026, 1, 15, 14, 0),
       kind: ActivityKind.interview,
     ),
     ActivityItem(
       title: 'Harborline Tech',
-      detail: 'Interview • Jan 20, 3:30 PM',
+      detail: 'Interview - Jan 20, 3:30 PM',
       timestamp: DateTime(2026, 1, 20, 15, 30),
       kind: ActivityKind.interview,
     ),

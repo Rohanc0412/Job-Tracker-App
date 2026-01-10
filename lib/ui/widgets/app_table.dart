@@ -4,6 +4,21 @@ import 'package:intl/intl.dart';
 import '../../data/models/application.dart';
 import '../../domain/status/status_types.dart';
 
+const double _companyWidth = 180;
+const double _roleWidth = 180;
+const double _statusWidth = 140;
+const double _confidenceWidth = 110;
+const double _updatedWidth = 130;
+const double _accountWidth = 120;
+const double _sourceWidth = 120;
+const double _tableMinWidth = _companyWidth +
+    _roleWidth +
+    _statusWidth +
+    _confidenceWidth +
+    _updatedWidth +
+    _accountWidth +
+    _sourceWidth;
+
 class AppTable extends StatefulWidget {
   final List<Application> applications;
   final String? selectedId;
@@ -22,13 +37,30 @@ class AppTable extends StatefulWidget {
 
 class _AppTableState extends State<AppTable> {
   bool _ascending = false;
+  ApplicationStatus? _statusFilter;
+  String? _accountFilter;
+
+  List<String> get _accounts {
+    final values = widget.applications.map((app) => app.account).toSet().toList()
+      ..sort();
+    return values;
+  }
 
   List<Application> get _sorted {
-    final sorted = [...widget.applications];
+    final sorted = _applyFilters(widget.applications);
     sorted.sort((a, b) => _ascending
         ? a.lastUpdated.compareTo(b.lastUpdated)
         : b.lastUpdated.compareTo(a.lastUpdated));
     return sorted;
+  }
+
+  List<Application> _applyFilters(List<Application> items) {
+    return items.where((app) {
+      final statusMatch = _statusFilter == null || app.status == _statusFilter;
+      final accountMatch =
+          _accountFilter == null || app.account == _accountFilter;
+      return statusMatch && accountMatch;
+    }).toList();
   }
 
   Color _statusColor(ApplicationStatus status, ColorScheme scheme) {
@@ -55,6 +87,8 @@ class _AppTableState extends State<AppTable> {
     final colorScheme = Theme.of(context).colorScheme;
     final dateFormat = DateFormat('yyyy-MM-dd');
     final rows = _sorted;
+    final statusLabel = _statusFilter?.label ?? 'All';
+    final accountLabel = _accountFilter ?? 'All';
 
     return Card(
       child: Padding(
@@ -67,25 +101,46 @@ class _AppTableState extends State<AppTable> {
                 Text('Applications',
                     style: Theme.of(context).textTheme.titleMedium),
                 const Spacer(),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: colorScheme.surfaceVariant,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: colorScheme.outlineVariant),
-                  ),
-                  child: Row(
-                    children: [
-                      Text(
-                        'All',
-                        style: Theme.of(context).textTheme.labelMedium,
+                _FilterMenu<ApplicationStatus>(
+                  label: 'Status',
+                  valueLabel: statusLabel,
+                  active: _statusFilter != null,
+                  items: [
+                    const PopupMenuItem<ApplicationStatus?>(
+                      value: null,
+                      child: Text('All statuses'),
+                    ),
+                    ...ApplicationStatus.values.map(
+                      (status) => PopupMenuItem<ApplicationStatus?>(
+                        value: status,
+                        child: Text(status.label),
                       ),
-                      const SizedBox(width: 6),
-                      Icon(Icons.expand_more,
-                          size: 16, color: colorScheme.onSurfaceVariant),
-                    ],
-                  ),
+                    ),
+                  ],
+                  onSelected: (value) {
+                    setState(() => _statusFilter = value);
+                  },
+                ),
+                const SizedBox(width: 10),
+                _FilterMenu<String>(
+                  label: 'Account',
+                  valueLabel: accountLabel,
+                  active: _accountFilter != null,
+                  items: [
+                    const PopupMenuItem<String?>(
+                      value: null,
+                      child: Text('All accounts'),
+                    ),
+                    ..._accounts.map(
+                      (account) => PopupMenuItem<String?>(
+                        value: account,
+                        child: Text(account),
+                      ),
+                    ),
+                  ],
+                  onSelected: (value) {
+                    setState(() => _accountFilter = value);
+                  },
                 ),
               ],
             ),
@@ -93,7 +148,7 @@ class _AppTableState extends State<AppTable> {
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: ConstrainedBox(
-                constraints: const BoxConstraints(minWidth: 860),
+                constraints: const BoxConstraints(minWidth: _tableMinWidth),
                 child: Column(
                   children: [
                     _HeaderRow(
@@ -103,92 +158,116 @@ class _AppTableState extends State<AppTable> {
                       },
                     ),
                     const SizedBox(height: 8),
-                    ListView.separated(
-                      itemCount: rows.length,
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      separatorBuilder: (_, __) =>
-                          Divider(color: colorScheme.outlineVariant),
-                      itemBuilder: (context, index) {
-                        final application = rows[index];
-                        final selected = application.id == widget.selectedId;
-                        final statusColor =
-                            _statusColor(application.status, colorScheme);
-
-                        return InkWell(
-                          onTap: () => widget.onSelected(application),
-                          borderRadius: BorderRadius.circular(12),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 12),
-                            decoration: BoxDecoration(
-                              color: selected
-                                  ? colorScheme.primary.withOpacity(0.12)
-                                  : Colors.transparent,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Row(
-                              children: [
-                                _Cell(
-                                  flex: 2,
-                                  child: Text(
-                                    application.company,
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .bodyMedium
-                                        ?.copyWith(fontWeight: FontWeight.w600),
-                                  ),
+                    if (rows.isEmpty)
+                      SizedBox(
+                        height: 160,
+                        child: Center(
+                          child: Text(
+                            'No applications match the selected filters',
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodyMedium
+                                ?.copyWith(
+                                  color: colorScheme.onSurfaceVariant,
                                 ),
-                                _Cell(
-                                  flex: 2,
-                                  child: Text(application.role),
-                                ),
-                                _Cell(
-                                  flex: 2,
-                                  child: Align(
-                                    alignment: Alignment.centerLeft,
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 10,
-                                        vertical: 4,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: statusColor.withOpacity(0.2),
-                                        borderRadius: BorderRadius.circular(16),
-                                      ),
-                                      child: Text(
-                                        application.status.label,
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .labelMedium
-                                            ?.copyWith(color: statusColor),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                _Cell(
-                                  flex: 1,
-                                  child: Text('${application.confidence}%'),
-                                ),
-                                _Cell(
-                                  flex: 1,
-                                  child:
-                                      Text(dateFormat.format(application.lastUpdated)),
-                                ),
-                                _Cell(
-                                  flex: 1,
-                                  child: Text(application.account),
-                                ),
-                                _Cell(
-                                  flex: 1,
-                                  child: Text(application.source),
-                                ),
-                              ],
-                            ),
                           ),
-                        );
-                      },
-                    ),
+                        ),
+                      )
+                    else
+                      Column(
+                        children: [
+                          for (var i = 0; i < rows.length; i++) ...[
+                            Builder(builder: (context) {
+                              final application = rows[i];
+                              final selected =
+                                  application.id == widget.selectedId;
+                              final statusColor = _statusColor(
+                                  application.status, colorScheme);
+
+                              return InkWell(
+                                onTap: () => widget.onSelected(application),
+                                borderRadius: BorderRadius.circular(12),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 10, vertical: 12),
+                                  decoration: BoxDecoration(
+                                    color: selected
+                                        ? colorScheme.primary.withOpacity(0.12)
+                                        : Colors.transparent,
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      _Cell(
+                                        width: _companyWidth,
+                                        child: Text(
+                                          application.company,
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .bodyMedium
+                                              ?.copyWith(
+                                                  fontWeight: FontWeight.w600),
+                                        ),
+                                      ),
+                                      _Cell(
+                                        width: _roleWidth,
+                                        child: Text(application.role),
+                                      ),
+                                      _Cell(
+                                        width: _statusWidth,
+                                        child: Align(
+                                          alignment: Alignment.centerLeft,
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 10,
+                                              vertical: 4,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color:
+                                                  statusColor.withOpacity(0.2),
+                                              borderRadius:
+                                                  BorderRadius.circular(16),
+                                            ),
+                                            child: Text(
+                                              application.status.label,
+                                              style: Theme.of(context)
+                                                  .textTheme
+                                                  .labelMedium
+                                                  ?.copyWith(
+                                                      color: statusColor),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      _Cell(
+                                        width: _confidenceWidth,
+                                        child: Text(
+                                            '${application.confidence}%'),
+                                      ),
+                                      _Cell(
+                                        width: _updatedWidth,
+                                        child: Text(dateFormat
+                                            .format(application.lastUpdated)),
+                                      ),
+                                      _Cell(
+                                        width: _accountWidth,
+                                        child: Text(application.account),
+                                      ),
+                                      _Cell(
+                                        width: _sourceWidth,
+                                        child: Text(application.source),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            }),
+                            if (i != rows.length - 1)
+                              Divider(color: colorScheme.outlineVariant),
+                          ],
+                        ],
+                      ),
                   ],
                 ),
               ),
@@ -217,13 +296,18 @@ class _HeaderRow extends StatelessWidget {
         );
 
     return Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        _HeaderCell(flex: 2, label: 'Company', textStyle: textStyle),
-        _HeaderCell(flex: 2, label: 'Role', textStyle: textStyle),
-        _HeaderCell(flex: 2, label: 'Status', textStyle: textStyle),
-        _HeaderCell(flex: 1, label: 'Confidence', textStyle: textStyle),
+        _HeaderCell(width: _companyWidth, label: 'Company', textStyle: textStyle),
+        _HeaderCell(width: _roleWidth, label: 'Role', textStyle: textStyle),
+        _HeaderCell(width: _statusWidth, label: 'Status', textStyle: textStyle),
         _HeaderCell(
-          flex: 1,
+          width: _confidenceWidth,
+          label: 'Confidence',
+          textStyle: textStyle,
+        ),
+        _HeaderCell(
+          width: _updatedWidth,
           label: 'Last Updated',
           textStyle: textStyle,
           onTap: onSortToggle,
@@ -233,22 +317,26 @@ class _HeaderRow extends StatelessWidget {
             color: Theme.of(context).colorScheme.onSurfaceVariant,
           ),
         ),
-        _HeaderCell(flex: 1, label: 'Account', textStyle: textStyle),
-        _HeaderCell(flex: 1, label: 'Source', textStyle: textStyle),
+        _HeaderCell(
+          width: _accountWidth,
+          label: 'Account',
+          textStyle: textStyle,
+        ),
+        _HeaderCell(width: _sourceWidth, label: 'Source', textStyle: textStyle),
       ],
     );
   }
 }
 
 class _HeaderCell extends StatelessWidget {
-  final int flex;
+  final double width;
   final String label;
   final TextStyle? textStyle;
   final Widget? trailing;
   final VoidCallback? onTap;
 
   const _HeaderCell({
-    required this.flex,
+    required this.width,
     required this.label,
     required this.textStyle,
     this.trailing,
@@ -268,7 +356,7 @@ class _HeaderCell extends StatelessWidget {
     );
 
     return _Cell(
-      flex: flex,
+      width: width,
       child: onTap == null
           ? content
           : InkWell(
@@ -284,18 +372,80 @@ class _HeaderCell extends StatelessWidget {
 }
 
 class _Cell extends StatelessWidget {
-  final int flex;
+  final double width;
   final Widget child;
 
-  const _Cell({required this.flex, required this.child});
+  const _Cell({required this.width, required this.child});
 
   @override
   Widget build(BuildContext context) {
-    return Expanded(
-      flex: flex,
+    return SizedBox(
+      width: width,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 6),
         child: child,
+      ),
+    );
+  }
+}
+
+class _FilterMenu<T> extends StatelessWidget {
+  final String label;
+  final String valueLabel;
+  final bool active;
+  final List<PopupMenuEntry<T?>> items;
+  final ValueChanged<T?> onSelected;
+
+  const _FilterMenu({
+    required this.label,
+    required this.valueLabel,
+    required this.active,
+    required this.items,
+    required this.onSelected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return PopupMenuButton<T?>(
+      onSelected: onSelected,
+      itemBuilder: (context) => items,
+      offset: const Offset(0, 36),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: active
+              ? colorScheme.primary.withOpacity(0.18)
+              : colorScheme.surfaceVariant,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: active
+                ? colorScheme.primary.withOpacity(0.5)
+                : colorScheme.outlineVariant,
+          ),
+        ),
+        child: Row(
+          children: [
+            Text(
+              '$label: $valueLabel',
+              style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                    color: active
+                        ? colorScheme.onSurface
+                        : colorScheme.onSurfaceVariant,
+                    fontWeight: active ? FontWeight.w600 : FontWeight.w500,
+                  ),
+            ),
+            const SizedBox(width: 6),
+            Icon(
+              Icons.expand_more,
+              size: 16,
+              color: active
+                  ? colorScheme.onSurface
+                  : colorScheme.onSurfaceVariant,
+            ),
+          ],
+        ),
       ),
     );
   }
