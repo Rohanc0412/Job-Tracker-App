@@ -35,7 +35,7 @@ class FakeApplicationRepo implements ApplicationRepo {
   }
 
   @override
-  Future<List<ActivityItem>> listUpcomingInterviews() async {
+  Future<List<ActivityItem>> listUpcomingInterviews({int days = 14}) async {
     return List<ActivityItem>.from(_upcoming);
   }
 

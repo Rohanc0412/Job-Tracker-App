@@ -1,0 +1,38 @@
+From: Aurora Health <talent@aurorahealth.org>
+To: Rohan Patel <rohan@jobtracker.example>
+Date: Tue, 13 Jan 2026 10:00:00 -0500
+Message-ID: <fx-009@aurorahealth.org>
+Subject: Aurora Health interview confirmation
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="ah-boundary-1"
+
+--ah-boundary-1
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+
+Hello Rohan,
+
+Your interview has been confirmed. Please use the attached calendar invite.
+
+Regards,
+Aurora Health Recruiting
+
+--ah-boundary-1
+Content-Type: text/calendar; method=REQUEST; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Aurora Health//Job Tracker//EN
+METHOD:REQUEST
+BEGIN:VEVENT
+UID:ah-009@aurorahealth.org
+DTSTAMP:20260113T150000Z
+DTSTART:20260119T160000Z
+DTEND:20260119T164500Z
+SUMMARY:Aurora Health - Product Manager Interview
+ORGANIZER:mailto:talent@aurorahealth.org
+END:VEVENT
+END:VCALENDAR
+
+--ah-boundary-1--

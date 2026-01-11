@@ -4,7 +4,7 @@ import '../models/application.dart';
 abstract class ApplicationRepo {
   Future<List<Application>> listApplications();
   Future<List<ActivityItem>> listRecentUpdates({int limit = 12});
-  Future<List<ActivityItem>> listUpcomingInterviews();
+  Future<List<ActivityItem>> listUpcomingInterviews({int days = 14});
   Future<List<ActivityItem>> listTimeline(String applicationId);
 
   Future<void> upsert(Application application);

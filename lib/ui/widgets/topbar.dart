@@ -5,6 +5,10 @@ class Topbar extends StatelessWidget {
   final String? subtitle;
   final bool showSearch;
   final VoidCallback? onSync;
+  final bool syncInProgress;
+  final String? syncLabel;
+  final TextEditingController? searchController;
+  final ValueChanged<String>? onSearchChanged;
 
   const Topbar({
     super.key,
@@ -12,6 +16,10 @@ class Topbar extends StatelessWidget {
     this.subtitle,
     this.showSearch = false,
     this.onSync,
+    this.syncInProgress = false,
+    this.syncLabel,
+    this.searchController,
+    this.onSearchChanged,
   });
 
   @override
@@ -46,10 +54,12 @@ class Topbar extends StatelessWidget {
             SizedBox(
               width: 280,
               child: TextField(
+                controller: searchController,
                 decoration: const InputDecoration(
                   hintText: 'Search company or role...',
                   prefixIcon: Icon(Icons.search),
                 ),
+                onChanged: onSearchChanged,
               ),
             ),
           if (showSearch) const SizedBox(width: 12),
@@ -69,9 +79,15 @@ class Topbar extends StatelessWidget {
           if (showSearch) const SizedBox(width: 12),
           if (showSearch)
             FilledButton.icon(
-              onPressed: onSync ?? () {},
-              icon: const Icon(Icons.sync),
-              label: const Text('Sync'),
+              onPressed: syncInProgress ? null : (onSync ?? () {}),
+              icon: syncInProgress
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.sync),
+              label: Text(syncLabel ?? 'Sync Gmail'),
             ),
         ],
       ),

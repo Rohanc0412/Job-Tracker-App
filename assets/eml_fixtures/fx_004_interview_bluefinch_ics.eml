@@ -1,0 +1,38 @@
+From: Blue Finch Software <recruiting@bluefinch.io>
+To: Rohan Patel <rohan@jobtracker.example>
+Date: Thu, 08 Jan 2026 16:15:00 -0800
+Message-ID: <fx-004@bluefinch.io>
+Subject: Interview scheduled: Blue Finch Software
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="bf-boundary-1"
+
+--bf-boundary-1
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+
+Hi Rohan,
+
+Your interview has been scheduled. Please find the calendar invite attached.
+
+Thanks,
+Blue Finch Recruiting
+
+--bf-boundary-1
+Content-Type: text/calendar; method=REQUEST; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Blue Finch Software//Job Tracker//EN
+METHOD:REQUEST
+BEGIN:VEVENT
+UID:bf-004@bluefinch.io
+DTSTAMP:20260108T001500Z
+DTSTART:20260112T170000Z
+DTEND:20260112T173000Z
+SUMMARY:Blue Finch Software - Backend Engineer Interview
+ORGANIZER:mailto:recruiting@bluefinch.io
+END:VEVENT
+END:VCALENDAR
+
+--bf-boundary-1--

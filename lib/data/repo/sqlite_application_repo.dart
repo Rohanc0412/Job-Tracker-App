@@ -35,7 +35,8 @@ class SqliteApplicationRepo implements ApplicationRepo {
   Future<List<ActivityItem>> listRecentUpdates({int limit = 12}) async {
     final db = await _db();
     final rows = db.select(
-      'SELECT e.subject, e.evidenceSnippet, e.date, e.extractedStatus, a.company '
+      'SELECT e.subject, e.evidenceSnippet, e.date, e.extractedStatus, '
+      'a.company, e.applicationId, e.raw_body_text, e.raw_body_path '
       'FROM email_events e '
       'LEFT JOIN applications a ON a.id = e.applicationId '
       'WHERE e.isSignificantUpdate = 1 '
@@ -46,16 +47,18 @@ class SqliteApplicationRepo implements ApplicationRepo {
   }
 
   @override
-  Future<List<ActivityItem>> listUpcomingInterviews() async {
+  Future<List<ActivityItem>> listUpcomingInterviews({int days = 14}) async {
     final db = await _db();
-    final nowIso = _clock().toIso8601String();
+    final now = _clock();
+    final nowIso = now.toIso8601String();
+    final endIso = now.add(Duration(days: days)).toIso8601String();
     final rows = db.select(
-      'SELECT i.startTime, a.company, a.role '
+      'SELECT i.startTime, a.company, a.role, i.applicationId, i.timezone '
       'FROM interview_events i '
       'LEFT JOIN applications a ON a.id = i.applicationId '
-      'WHERE i.startTime >= ? '
+      'WHERE i.startTime >= ? AND i.startTime <= ? '
       'ORDER BY i.startTime ASC;',
-      [nowIso],
+      [nowIso, endIso],
     );
     return rows.map(_mapInterviewActivity).toList();
   }
@@ -64,12 +67,21 @@ class SqliteApplicationRepo implements ApplicationRepo {
   Future<List<ActivityItem>> listTimeline(String applicationId) async {
     final db = await _db();
     final emailRows = db.select(
-      'SELECT subject, evidenceSnippet, date, extractedStatus '
+      'SELECT subject, evidenceSnippet, date, extractedStatus, raw_body_text, raw_body_path '
       'FROM email_events WHERE applicationId = ?;',
       [applicationId],
     );
+
+    // Debug: Log what we're getting
+    for (final row in emailRows) {
+      final hasText = row['raw_body_text'] != null;
+      final hasPath = row['raw_body_path'] != null;
+      final textLen = hasText ? (row['raw_body_text'] as String).length : 0;
+      print('[Timeline Query] subject: ${row['subject']}, hasText: $hasText (len: $textLen), hasPath: $hasPath');
+    }
+
     final interviewRows = db.select(
-      'SELECT startTime, location, meetingUrl '
+      'SELECT startTime, location, meetingUrl, timezone '
       'FROM interview_events WHERE applicationId = ?;',
       [applicationId],
     );
@@ -158,6 +170,9 @@ class SqliteApplicationRepo implements ApplicationRepo {
       detail: detail,
       timestamp: DateTime.parse(row['date'] as String),
       kind: _kindFromStatus(status),
+      applicationId: row['applicationId'] as String?,
+      rawBodyText: row['raw_body_text'] as String?,
+      rawBodyPath: row['raw_body_path'] as String?,
     );
   }
 
@@ -166,9 +181,11 @@ class SqliteApplicationRepo implements ApplicationRepo {
     final role = row['role'] as String?;
     return ActivityItem(
       title: company ?? 'Interview',
-      detail: role == null ? 'Interview scheduled' : 'Interview - $role',
+      detail: role ?? 'Interview scheduled',
       timestamp: DateTime.parse(row['startTime'] as String),
       kind: ActivityKind.interview,
+      applicationId: row['applicationId'] as String?,
+      timezone: row['timezone'] as String?,
     );
   }
 
@@ -180,6 +197,8 @@ class SqliteApplicationRepo implements ApplicationRepo {
       detail: (row['evidenceSnippet'] as String?) ?? subject,
       timestamp: DateTime.parse(row['date'] as String),
       kind: _kindFromStatus(status),
+      rawBodyText: row['raw_body_text'] as String?,
+      rawBodyPath: row['raw_body_path'] as String?,
     );
   }
 
@@ -192,6 +211,7 @@ class SqliteApplicationRepo implements ApplicationRepo {
       detail: detail ?? 'Interview scheduled',
       timestamp: start,
       kind: ActivityKind.interview,
+      timezone: row['timezone'] as String?,
     );
   }
 

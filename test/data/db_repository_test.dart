@@ -59,7 +59,7 @@ void main() {
     final updates = await repo.listRecentUpdates();
     expect(updates, isNotEmpty);
 
-    final upcoming = await repo.listUpcomingInterviews();
+    final upcoming = await repo.listUpcomingInterviews(days: 30);
     expect(upcoming, isNotEmpty);
 
     final timeline = await repo.listTimeline('app_002');
@@ -99,6 +99,86 @@ void main() {
       ),
       throwsA(isA<SqliteException>()),
     );
+
+    await database.close();
+  }, skip: _sqliteSkipReason);
+
+  test('upcoming interviews respect window and ordering', () async {
+    final database = AppDatabase(database: sqlite3.openInMemory());
+    await database.open();
+    final now = DateTime(2026, 1, 10, 9);
+    final repo = SqliteApplicationRepo(
+      database,
+      clock: () => now,
+    );
+    final db = database.rawDb;
+
+    db.execute('DELETE FROM interview_events;');
+
+    final appId = SeedData.applications.first.id;
+    db.execute(
+      'INSERT INTO interview_events (id, applicationId, accountLabel, messageId, '
+      'startTime, endTime, timezone, location, meetingUrl, source, confidence, '
+      'createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
+      [
+        'iv_1',
+        appId,
+        'Gmail',
+        'msg-1',
+        now.add(const Duration(days: 1)).toIso8601String(),
+        null,
+        'UTC',
+        null,
+        null,
+        'Fixture',
+        0.9,
+        now.toIso8601String(),
+      ],
+    );
+    db.execute(
+      'INSERT INTO interview_events (id, applicationId, accountLabel, messageId, '
+      'startTime, endTime, timezone, location, meetingUrl, source, confidence, '
+      'createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
+      [
+        'iv_2',
+        appId,
+        'Gmail',
+        'msg-2',
+        now.add(const Duration(days: 10)).toIso8601String(),
+        null,
+        'UTC',
+        null,
+        null,
+        'Fixture',
+        0.9,
+        now.toIso8601String(),
+      ],
+    );
+    db.execute(
+      'INSERT INTO interview_events (id, applicationId, accountLabel, messageId, '
+      'startTime, endTime, timezone, location, meetingUrl, source, confidence, '
+      'createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
+      [
+        'iv_3',
+        appId,
+        'Gmail',
+        'msg-3',
+        now.add(const Duration(days: 25)).toIso8601String(),
+        null,
+        'UTC',
+        null,
+        null,
+        'Fixture',
+        0.9,
+        now.toIso8601String(),
+      ],
+    );
+
+    final upcoming = await repo.listUpcomingInterviews(days: 14);
+    expect(upcoming.length, 2);
+    expect(upcoming.first.timestamp.isBefore(upcoming.last.timestamp), isTrue);
+    expect(upcoming.first.timestamp, now.add(const Duration(days: 1)));
+    expect(upcoming.last.timestamp, now.add(const Duration(days: 10)));
 
     await database.close();
   }, skip: _sqliteSkipReason);

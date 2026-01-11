@@ -12,6 +12,10 @@ class EmailEvent {
   final String? extractedStatus;
   final String? extractedFieldsJson;
   final String? evidenceSnippet;
+  final String? rawBodyText;
+  final String? rawBodyPath;
+  final String? rawBodySha256;
+  final int? rawBodyByteLen;
   final String hash;
   final bool isSignificantUpdate;
 
@@ -29,6 +33,10 @@ class EmailEvent {
     this.extractedStatus,
     this.extractedFieldsJson,
     this.evidenceSnippet,
+    this.rawBodyText,
+    this.rawBodyPath,
+    this.rawBodySha256,
+    this.rawBodyByteLen,
     required this.hash,
     required this.isSignificantUpdate,
   });

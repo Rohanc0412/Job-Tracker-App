@@ -1,25 +1,28 @@
-import 'dart:io';
-
-import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 import 'package:sqlite3/sqlite3.dart';
 
 import '../seed/seed_data.dart';
+import '../../services/app_data_paths.dart';
+import '../../services/settings_store.dart';
 
 class AppDatabase {
   AppDatabase({
     Database? database,
     String? dbPath,
     Future<String> Function()? pathResolver,
+    bool? skipSeed,
   })  : _database = database,
         _dbPath = dbPath,
-        _pathResolver = pathResolver ?? _resolveDefaultPath;
+        _pathResolver = pathResolver ?? _resolveDefaultPath,
+        _externalDatabase = database != null,
+        _skipSeedOverride = skipSeed;
 
   static final AppDatabase instance = AppDatabase();
 
   Database? _database;
   final String? _dbPath;
   final Future<String> Function() _pathResolver;
+  final bool _externalDatabase;
+  final bool? _skipSeedOverride;
   bool _initialized = false;
 
   Database get rawDb {
@@ -41,6 +44,7 @@ class AppDatabase {
     final db = _database!;
     db.execute('PRAGMA foreign_keys = ON;');
     _createSchema(db);
+    _ensureEmailEventColumns(db);
     _seedIfEmpty(db);
     _initialized = true;
   }
@@ -51,10 +55,20 @@ class AppDatabase {
     _initialized = false;
   }
 
+  Future<void> forceClose() async {
+    try {
+      _database?.dispose();
+    } catch (_) {
+      // Ignore errors
+    }
+    _database = null;
+    _initialized = false;
+    // Give OS time to release file locks
+    await Future.delayed(const Duration(seconds: 1));
+  }
+
   static Future<String> _resolveDefaultPath() async {
-    final Directory supportDir = await getApplicationSupportDirectory();
-    await supportDir.create(recursive: true);
-    return p.join(supportDir.path, 'job_tracker.db');
+    return AppDataPaths.databasePath();
   }
 
   void _createSchema(Database db) {
@@ -63,10 +77,46 @@ class AppDatabase {
     }
   }
 
+  void _ensureEmailEventColumns(Database db) {
+    final columns = db.select("PRAGMA table_info('email_events');");
+    final existing = <String>{};
+    for (final row in columns) {
+      final name = row['name'] as String?;
+      if (name != null) {
+        existing.add(name);
+      }
+    }
+    final additions = <String, String>{
+      'raw_body_text': 'TEXT',
+      'raw_body_path': 'TEXT',
+      'raw_body_sha256': 'TEXT',
+      'raw_body_byte_len': 'INTEGER',
+    };
+    for (final entry in additions.entries) {
+      if (!existing.contains(entry.key)) {
+        db.execute(
+          'ALTER TABLE email_events ADD COLUMN ${entry.key} ${entry.value};',
+        );
+      }
+    }
+  }
+
   void _seedIfEmpty(Database db) {
     final result = db.select('SELECT COUNT(*) AS count FROM applications;');
     final count = (result.first['count'] as num).toInt();
+    print('[AppDatabase] _seedIfEmpty: count=$count');
     if (count == 0) {
+      if (!_externalDatabase) {
+        // Use override if provided, otherwise check SettingsStore
+        final skipSeed = _skipSeedOverride ??
+            (SettingsStore.instance.get<bool>('skipSeed') ?? false);
+        print('[AppDatabase] _seedIfEmpty: skipSeed=$skipSeed (override=${_skipSeedOverride != null})');
+        if (skipSeed) {
+          print('[AppDatabase] Skipping seed data (user disabled)');
+          return;
+        }
+      }
+      print('[AppDatabase] Seeding database with demo data');
       _seedDatabase(db);
     }
   }
@@ -228,6 +278,10 @@ const List<String> _schemaStatements = [
     extractedStatus TEXT,
     extractedFieldsJson TEXT,
     evidenceSnippet TEXT,
+    raw_body_text TEXT,
+    raw_body_path TEXT,
+    raw_body_sha256 TEXT,
+    raw_body_byte_len INTEGER,
     hash TEXT NOT NULL,
     isSignificantUpdate INTEGER NOT NULL,
     FOREIGN KEY(applicationId) REFERENCES applications(id) ON DELETE CASCADE,
@@ -264,5 +318,7 @@ const List<String> _schemaStatements = [
   ''',
   'CREATE INDEX IF NOT EXISTS idx_applications_status ON applications(currentStatus);',
   'CREATE INDEX IF NOT EXISTS idx_applications_lastSeen ON applications(lastSeen);',
+  'CREATE INDEX IF NOT EXISTS idx_email_events_date ON email_events(date);',
+  'CREATE INDEX IF NOT EXISTS idx_email_events_applicationId ON email_events(applicationId);',
   'CREATE INDEX IF NOT EXISTS idx_interview_events_startTime ON interview_events(startTime);',
 ];
