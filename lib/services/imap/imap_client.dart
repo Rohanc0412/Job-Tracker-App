@@ -147,10 +147,11 @@ class ImapClient {
         _ensureOk(line);
         break;
       }
-      final headerMatch =
-          RegExp(r'BODY(?:\.PEEK)?\[HEADER[^\]]*\] \{(\d+)\}',
-                  caseSensitive: false)
-              .firstMatch(line);
+      final headerMatch = RegExp(
+        r'BODY(?:\.PEEK)?\[HEADER[^\]]*\](?:<[^>]*>)?\s+\{(\d+)\}',
+        caseSensitive: false,
+      ).firstMatch(line);
+
       if (headerMatch != null) {
         final length = int.parse(headerMatch.group(1)!);
         final literal = await _reader!.readLiteral(
@@ -166,7 +167,8 @@ class ImapClient {
 
   Future<ImapFetchedMessage> fetchMessage(int uid) async {
     final tag = _nextTag();
-    _sendTagged(tag, _requestBuilder.uidFetchHeadersAndBody(uid, _maxLiteralBytes));
+    _sendTagged(
+        tag, _requestBuilder.uidFetchHeadersAndBody(uid, _maxLiteralBytes));
     String headerText = '';
     Uint8List bodyBytes = Uint8List(0);
     var bodyByteLen = 0;
@@ -177,10 +179,12 @@ class ImapClient {
         _ensureOk(line);
         break;
       }
-      final headerMatch =
-          RegExp(r'BODY(?:\.PEEK)?\[HEADER[^\]]*\] \{(\d+)\}',
-                  caseSensitive: false)
-              .firstMatch(line);
+
+      final headerMatch = RegExp(
+        r'BODY(?:\.PEEK)?\[HEADER[^\]]*\](?:<[^>]*>)?\s+\{(\d+)\}',
+        caseSensitive: false,
+      ).firstMatch(line);
+
       if (headerMatch != null) {
         final length = int.parse(headerMatch.group(1)!);
         final literal = await _reader!.readLiteral(
@@ -191,10 +195,11 @@ class ImapClient {
         continue;
       }
 
-      final bodyMatch =
-          RegExp(r'BODY(?:\.PEEK)?\[TEXT[^\]]*\] \{(\d+)\}',
-                  caseSensitive: false)
-              .firstMatch(line);
+      final bodyMatch = RegExp(
+        r'BODY(?:\.PEEK)?\[TEXT[^\]]*\](?:<[^>]*>)?\s+\{(\d+)\}',
+        caseSensitive: false,
+      ).firstMatch(line);
+
       if (bodyMatch != null) {
         final length = int.parse(bodyMatch.group(1)!);
         final literal = await _reader!.readLiteral(
@@ -223,7 +228,8 @@ class ImapClient {
 
   Future<void> _sendAndExpectOk(String command) async {
     final tag = _nextTag();
-    final preview = command.length > 20 ? '${command.substring(0, 20)}...' : command;
+    final preview =
+        command.length > 20 ? '${command.substring(0, 20)}...' : command;
     print('[ImapClient] Tag: $tag, Command: $preview');
     _sendTagged(tag, command);
     print('[ImapClient] Command sent, waiting for response...');

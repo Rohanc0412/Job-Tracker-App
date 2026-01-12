@@ -187,6 +187,20 @@ class SeedData {
       extractedStatus: 'assessment',
       extractedFieldsJson: '{"assessment":"take-home"}',
       evidenceSnippet: 'Assessment link delivered for review.',
+      rawBodyText: '''Hello,
+
+Thank you for your interest in the ML Engineer role at Delta Dynamics. We were impressed with your background and would like to move forward with the next step.
+
+Please complete the technical assessment at the link below. The assessment should take approximately 2-3 hours and covers machine learning fundamentals, data processing, and model evaluation.
+
+Assessment Link: https://assessments.deltadynamics.com/ml-eng-2026
+
+You'll have 7 days to complete the assessment. Once submitted, our team will review it within 3-5 business days.
+
+If you have any questions, feel free to reach out.
+
+Best regards,
+Delta Dynamics Hiring Team''',
       hash: 'hash_email_001',
       isSignificantUpdate: true,
     ),
@@ -204,6 +218,24 @@ class SeedData {
       extractedStatus: 'interview',
       extractedFieldsJson: '{"stage":"phone screen"}',
       evidenceSnippet: 'Interview scheduled for Jan 15, 2:00 PM.',
+      rawBodyText: '''Hi there,
+
+Great news! We'd like to schedule a phone screen interview with you for the Software Engineer position at Acme Robotics.
+
+Interview Details:
+Date: Wednesday, January 15, 2026
+Time: 2:00 PM - 2:45 PM EST
+Format: Video call
+Meeting Link: https://meet.acmerobotics.com/room/eng-123
+
+You'll be speaking with Sarah Chen, our Engineering Manager. The interview will cover your background, technical experience, and fit for the team.
+
+Please confirm your availability by replying to this email.
+
+Looking forward to speaking with you!
+
+Best,
+Acme Robotics Recruiting Team''',
       hash: 'hash_email_002',
       isSignificantUpdate: true,
     ),
@@ -221,6 +253,29 @@ class SeedData {
       extractedStatus: 'offer',
       extractedFieldsJson: '{"offer":"extended"}',
       evidenceSnippet: 'Offer package shared and ready for review.',
+      rawBodyText: '''Dear Candidate,
+
+Congratulations! We're excited to extend an offer for the Product Manager position at Futura Mobility.
+
+Offer Summary:
+• Base Salary: \$135,000 annually
+• Equity: Stock options worth 0.15% of company
+• Benefits: Health, dental, vision, 401k matching
+• Start Date: February 3, 2026
+• Location: Boston, MA (Hybrid - 3 days/week in office)
+
+The full offer letter is attached to this email with complete details of compensation, benefits, and terms.
+
+We believe you'll be a great addition to our team and look forward to working with you. Please review the offer and let us know if you have any questions.
+
+To accept, please sign and return the offer letter by January 10, 2026.
+
+Welcome to Futura Mobility!
+
+Best regards,
+Lisa Park
+Head of Talent
+Futura Mobility''',
       hash: 'hash_email_003',
       isSignificantUpdate: true,
     ),
@@ -238,6 +293,17 @@ class SeedData {
       extractedStatus: 'underReview',
       extractedFieldsJson: '{"status":"under_review"}',
       evidenceSnippet: 'Recruiter reviewed application.',
+      rawBodyText: '''Hello,
+
+Thank you for applying for the Backend Developer position at Cloud Harbor.
+
+Your application has been reviewed and moved to the next stage. Our engineering team is currently evaluating your profile and technical background.
+
+We'll be in touch within the next 7-10 business days regarding next steps. In the meantime, feel free to explore our engineering blog at https://blog.cloudharbor.io to learn more about our tech stack and culture.
+
+Thank you for your patience.
+
+Cloud Harbor Careers Team''',
       hash: 'hash_email_004',
       isSignificantUpdate: true,
     ),
@@ -255,6 +321,18 @@ class SeedData {
       extractedStatus: 'received',
       extractedFieldsJson: '{"status":"received"}',
       evidenceSnippet: 'Application received and logged.',
+      rawBodyText: '''Dear Applicant,
+
+Thank you for your application for the DevOps Engineer position at Granite Systems. We have received your resume and it has been logged in our system.
+
+Application Reference: GS-DEVOPS-2026-143
+
+Our hiring team reviews all applications on a rolling basis. If your qualifications match our requirements, a recruiter will reach out to schedule an initial conversation.
+
+We appreciate your interest in Granite Systems.
+
+Best regards,
+Granite Systems HR''',
       hash: 'hash_email_005',
       isSignificantUpdate: true,
     ),
@@ -272,6 +350,18 @@ class SeedData {
       extractedStatus: 'rejected',
       extractedFieldsJson: '{"status":"closed"}',
       evidenceSnippet: 'Position closed.',
+      rawBodyText: '''Dear Candidate,
+
+Thank you for your interest in the QA Engineer position at Evergreen Health.
+
+After careful consideration, we have decided to move forward with other candidates whose qualifications more closely align with our current needs. This was a competitive process and we appreciate the time you invested in your application.
+
+We encourage you to apply for future openings that match your skills and experience. You can view our current opportunities at https://evergreenhealth.com/careers
+
+We wish you the best in your job search.
+
+Sincerely,
+Evergreen Health Talent Team''',
       hash: 'hash_email_006',
       isSignificantUpdate: true,
     ),

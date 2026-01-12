@@ -165,7 +165,7 @@ class AppDatabase {
       final emailStmt = db.prepare(
         'INSERT INTO email_events (id, applicationId, accountLabel, provider, folder, cursorValue, '
         'messageId, subject, fromAddr, date, extractedStatus, extractedFieldsJson, evidenceSnippet, '
-        'hash, isSignificantUpdate) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
+        'raw_body_text, raw_body_path, hash, isSignificantUpdate) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
       );
       for (final event in SeedData.emailEvents) {
         emailStmt.execute([
@@ -182,6 +182,8 @@ class AppDatabase {
           event.extractedStatus,
           event.extractedFieldsJson,
           event.evidenceSnippet,
+          event.rawBodyText,
+          event.rawBodyPath,
           event.hash,
           event.isSignificantUpdate ? 1 : 0,
         ]);

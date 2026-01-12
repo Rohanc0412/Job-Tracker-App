@@ -45,8 +45,7 @@ class DetailsPanel extends StatelessWidget {
       _showPortalError(context, 'Invalid portal URL.');
       return;
     }
-    final launched =
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
+    final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
     if (!launched) {
       _showPortalError(context, 'Unable to open portal.');
     }
@@ -164,8 +163,7 @@ class DetailsPanel extends StatelessWidget {
                                         .textTheme
                                         .labelMedium
                                         ?.copyWith(
-                                          color:
-                                              colorScheme.onSurfaceVariant,
+                                          color: colorScheme.onSurfaceVariant,
                                         ),
                                   ),
                               ],
@@ -296,12 +294,14 @@ class _TimelineItemState extends State<_TimelineItem> {
   }
 
   bool get _hasBodyContent {
-    return widget.item.rawBodyText != null || widget.item.rawBodyPath != null;
+    return (widget.item.rawBodyText?.isNotEmpty ?? false) ||
+        (widget.item.rawBodyPath?.isNotEmpty ?? false);
   }
 
   Future<void> _toggleExpanded() async {
     if (!_hasBodyContent) {
-      AppLogger.log.info('[Timeline] No body content for item: ${widget.item.title}');
+      AppLogger.log
+          .info('[Timeline] No body content for item: ${widget.item.title}');
       return;
     }
 
@@ -310,16 +310,20 @@ class _TimelineItemState extends State<_TimelineItem> {
       if (_fullBody == null && !_isLoadingBody) {
         setState(() => _isLoadingBody = true);
         try {
-          AppLogger.log.info('[Timeline] Loading body - hasText: ${widget.item.rawBodyText != null}, hasPath: ${widget.item.rawBodyPath != null}');
-          AppLogger.log.info('[Timeline] rawBodyText length: ${widget.item.rawBodyText?.length ?? 0}');
-          AppLogger.log.info('[Timeline] rawBodyPath: ${widget.item.rawBodyPath}');
+          AppLogger.log.info(
+              '[Timeline] Loading body - hasText: ${widget.item.rawBodyText != null}, hasPath: ${widget.item.rawBodyPath != null}');
+          AppLogger.log.info(
+              '[Timeline] rawBodyText length: ${widget.item.rawBodyText?.length ?? 0}');
+          AppLogger.log
+              .info('[Timeline] rawBodyPath: ${widget.item.rawBodyPath}');
 
           final body = await _bodyService.getFullBody(
             rawBodyText: widget.item.rawBodyText,
             rawBodyPath: widget.item.rawBodyPath,
           );
 
-          AppLogger.log.info('[Timeline] Loaded body length: ${body?.length ?? 0}');
+          AppLogger.log
+              .info('[Timeline] Loaded body length: ${body?.length ?? 0}');
 
           if (mounted) {
             setState(() {
@@ -382,9 +386,10 @@ class _TimelineItemState extends State<_TimelineItem> {
                       const SizedBox(height: 4),
                       Text(
                         widget.item.detail,
-                        style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                              color: colorScheme.onSurfaceVariant,
-                            ),
+                        style:
+                            Theme.of(context).textTheme.labelMedium?.copyWith(
+                                  color: colorScheme.onSurfaceVariant,
+                                ),
                       ),
                     ],
                   ),

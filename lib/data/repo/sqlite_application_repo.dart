@@ -66,18 +66,18 @@ class SqliteApplicationRepo implements ApplicationRepo {
   @override
   Future<List<ActivityItem>> listTimeline(String applicationId) async {
     final db = await _db();
+    print('[Repo] listTimeline for applicationId: $applicationId');
     final emailRows = db.select(
-      'SELECT subject, evidenceSnippet, date, extractedStatus, raw_body_text, raw_body_path '
+      'SELECT id, subject, evidenceSnippet, date, extractedStatus, raw_body_text, raw_body_path '
       'FROM email_events WHERE applicationId = ?;',
       [applicationId],
     );
-
-    // Debug: Log what we're getting
+    print('[Repo] Found ${emailRows.length} emails for this application');
     for (final row in emailRows) {
-      final hasText = row['raw_body_text'] != null;
-      final hasPath = row['raw_body_path'] != null;
-      final textLen = hasText ? (row['raw_body_text'] as String).length : 0;
-      print('[Timeline Query] subject: ${row['subject']}, hasText: $hasText (len: $textLen), hasPath: $hasPath');
+      final emailId = row['id'] as String;
+      final subject = row['subject'] as String;
+      final bodyLen = (row['raw_body_text'] as String?)?.length ?? 0;
+      print('[Repo]   - Email $emailId: "$subject" (body: $bodyLen bytes)');
     }
 
     final interviewRows = db.select(

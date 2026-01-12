@@ -29,17 +29,45 @@ class ImapRequestBuilder {
   }
 
   String uidSearchJobApplications(DateTime? since) {
-    // For initial sync, fetch ALL emails since the start date
-    // The ingestion pipeline will filter for job-related content
-    final dateFilter = since != null ? 'SINCE ${_dateFormat.format(since.toUtc())}' : 'ALL';
-
-    return 'UID SEARCH $dateFilter';
+    // Server-side filtering for job-related emails using IMAP OR queries
+    // This significantly reduces the number of emails fetched
+    final dateFilter = since != null ? 'SINCE ${_dateFormat.format(since.toUtc())} ' : '';
+    final keywordFilter = _jobKeywordFilter();
+    return 'UID SEARCH $dateFilter$keywordFilter';
   }
 
   String uidSearchJobApplicationsFrom(int uid) {
-    // For incremental sync, fetch ALL emails from the last UID
-    // The ingestion pipeline will filter for job-related content
-    return 'UID SEARCH UID $uid:*';
+    // Server-side filtering for job-related emails from a specific UID
+    final keywordFilter = _jobKeywordFilter();
+    return 'UID SEARCH UID $uid:* $keywordFilter';
+  }
+
+  /// Builds an IMAP OR query to filter for job-related emails.
+  /// Uses TEXT search which matches both subject and body.
+  String _jobKeywordFilter() {
+    // Keywords that indicate job application emails
+    const keywords = [
+      'application',
+      'interview',
+      'candidate',
+      'position',
+      'opportunity',
+      'hiring',
+      'recruiter',
+      'offer',
+      'rejected',
+      'assessment',
+      'coding challenge',
+      'phone screen',
+    ];
+
+    // Build nested OR structure: OR (OR (OR a b) c) d)
+    // IMAP OR takes exactly 2 arguments, so we nest them
+    var filter = 'TEXT "${keywords[0]}"';
+    for (var i = 1; i < keywords.length; i++) {
+      filter = 'OR $filter TEXT "${keywords[i]}"';
+    }
+    return '($filter)';
   }
 
   String uidFetchHeadersAndBody(int uid, int maxBodyBytes) {

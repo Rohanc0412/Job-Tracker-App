@@ -205,8 +205,8 @@ void main() {
         responses: ['* BYE LOGOUT\r\n', '{tag} OK LOGOUT completed\r\n'],
       ),
     ];
-    final clientFirst =
-        ImapClient(transport: MockImapTransport(scriptFirst), maxLiteralBytes: 1024);
+    final clientFirst = ImapClient(
+        transport: MockImapTransport(scriptFirst), maxLiteralBytes: 1024);
     final config = GmailSyncConfig(
       email: 'user@example.com',
       appPassword: 'app-pass',
@@ -250,8 +250,8 @@ void main() {
         responses: ['* BYE LOGOUT\r\n', '{tag} OK LOGOUT completed\r\n'],
       ),
     ];
-    final clientSecond =
-        ImapClient(transport: MockImapTransport(scriptSecond), maxLiteralBytes: 1024);
+    final clientSecond = ImapClient(
+        transport: MockImapTransport(scriptSecond), maxLiteralBytes: 1024);
 
     await GmailSyncRunner.run(
       config.copyWith(startDate: null),
@@ -290,7 +290,7 @@ List<Object> _fetchResponses({
   return [
     '* 1 FETCH (UID $uid BODY[HEADER] {${headerBytes.length}}\r\n',
     headerBytes,
-    '\r\n BODY[TEXT] {${bodyBytes.length}}\r\n',
+    '\r\n BODY[TEXT]<0> {${bodyBytes.length}}\r\n',
     bodyBytes,
     '\r\n)\r\n{tag} OK FETCH completed\r\n',
   ];

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../data/models/activity_item.dart';
+import '../../services/body_retrieval_service.dart';
+import '../../services/logger.dart';
 
 class ActivityTabs extends StatefulWidget {
   final List<ActivityItem> updates;
@@ -186,59 +188,11 @@ class _ActivityList extends StatelessWidget {
         final displayTime = item.kind == ActivityKind.interview
             ? _formatInterviewTime(item, dateTimeFormat)
             : dateFormat.format(item.timestamp);
-        final content = Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          decoration: BoxDecoration(
-            color: colorScheme.surfaceVariant.withOpacity(0.7),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: colorScheme.outlineVariant),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 8,
-                height: 8,
-                decoration: BoxDecoration(
-                  color: _dotColor(item.kind, colorScheme),
-                  shape: BoxShape.circle,
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      item.title,
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      item.detail,
-                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                            color: colorScheme.onSurfaceVariant,
-                          ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                displayTime,
-                style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
-                    ),
-              ),
-            ],
-          ),
-        );
-        if (onItemSelected == null) {
-          return content;
-        }
-        return InkWell(
-          borderRadius: BorderRadius.circular(14),
-          onTap: () => onItemSelected!(item),
-          child: content,
+        return _ActivityListItem(
+          item: item,
+          displayTime: displayTime,
+          dotColor: _dotColor(item.kind, colorScheme),
+          onItemSelected: onItemSelected,
         );
       },
     );
@@ -275,5 +229,210 @@ class _ActivityList extends StatelessWidget {
       return parts.last.replaceAll('_', ' ');
     }
     return timezone;
+  }
+}
+
+class _ActivityListItem extends StatefulWidget {
+  final ActivityItem item;
+  final String displayTime;
+  final Color dotColor;
+  final ValueChanged<ActivityItem>? onItemSelected;
+
+  const _ActivityListItem({
+    required this.item,
+    required this.displayTime,
+    required this.dotColor,
+    this.onItemSelected,
+  });
+
+  @override
+  State<_ActivityListItem> createState() => _ActivityListItemState();
+}
+
+class _ActivityListItemState extends State<_ActivityListItem> {
+  bool _isExpanded = false;
+  String? _fullBody;
+  bool _isLoadingBody = false;
+  final _bodyService = BodyRetrievalService();
+
+  bool get _hasBodyContent {
+    return widget.item.rawBodyText != null || widget.item.rawBodyPath != null;
+  }
+
+  Future<void> _toggleExpanded() async {
+    if (!_hasBodyContent) {
+      AppLogger.log.info('[ActivityTab] No body content for item: ${widget.item.title}');
+      return;
+    }
+
+    if (!_isExpanded) {
+      // Expanding - load body if not already loaded
+      if (_fullBody == null && !_isLoadingBody) {
+        setState(() => _isLoadingBody = true);
+        try {
+          AppLogger.log.info('[ActivityTab] Loading body - hasText: ${widget.item.rawBodyText != null}, hasPath: ${widget.item.rawBodyPath != null}');
+
+          final body = await _bodyService.getFullBody(
+            rawBodyText: widget.item.rawBodyText,
+            rawBodyPath: widget.item.rawBodyPath,
+          );
+
+          AppLogger.log.info('[ActivityTab] Loaded body length: ${body?.length ?? 0}');
+
+          if (mounted) {
+            setState(() {
+              _fullBody = body;
+              _isLoadingBody = false;
+              _isExpanded = true;
+            });
+          }
+        } catch (e, stack) {
+          AppLogger.log.severe('[ActivityTab] Error loading body: $e\n$stack');
+          if (mounted) {
+            setState(() => _isLoadingBody = false);
+          }
+        }
+      } else {
+        setState(() => _isExpanded = true);
+      }
+    } else {
+      // Collapsing
+      setState(() => _isExpanded = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    final content = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceVariant.withOpacity(0.7),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: colorScheme.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  color: widget.dotColor,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      widget.item.title,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      widget.item.detail,
+                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    widget.displayTime,
+                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                  ),
+                  if (_hasBodyContent) ...[
+                    const SizedBox(height: 4),
+                    Icon(
+                      _isExpanded ? Icons.expand_less : Icons.expand_more,
+                      size: 16,
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ],
+                ],
+              ),
+            ],
+          ),
+          if (_isExpanded) ...[
+            const SizedBox(height: 12),
+            Divider(color: colorScheme.outlineVariant, height: 1),
+            const SizedBox(height: 12),
+            if (_isLoadingBody)
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: colorScheme.primary,
+                    ),
+                  ),
+                ),
+              )
+            else if (_fullBody != null)
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: colorScheme.surface,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: colorScheme.outlineVariant),
+                ),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 300),
+                  child: SingleChildScrollView(
+                    child: SelectableText(
+                      _fullBody!,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            fontFamily: 'monospace',
+                            color: colorScheme.onSurface,
+                          ),
+                    ),
+                  ),
+                ),
+              )
+            else
+              Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Text(
+                  'Body content unavailable',
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: colorScheme.error,
+                        fontStyle: FontStyle.italic,
+                      ),
+                ),
+              ),
+          ],
+        ],
+      ),
+    );
+
+    if (widget.onItemSelected == null && !_hasBodyContent) {
+      return content;
+    }
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(14),
+      onTap: _hasBodyContent
+          ? _toggleExpanded
+          : (widget.onItemSelected != null
+              ? () => widget.onItemSelected!(widget.item)
+              : null),
+      child: content,
+    );
   }
 }

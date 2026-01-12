@@ -48,6 +48,10 @@ Option B (manual):
 2) Delete the `job_tracker.db` file from the app support directory.
 3) Delete the `raw_bodies/` directory if present.
 
+Note: If you notice duplicate email content across different applications after
+a Gmail sync, this indicates emails were incorrectly matched during dedup. Reset
+local data and re-sync to fix.
+
 ## Test fixtures
 Synthetic `.eml` fixtures are included under `assets/eml_fixtures/` to validate
 parsing and status detection without using real email data.
@@ -63,7 +67,9 @@ To load fixtures:
   offer, rejected) with confidence scores; monotonic transitions prevent
   regressions unless strong evidence is detected.
 - Dedup strategy: match by job ID first, then portal URL, then company/role
-  similarity using token overlap.
+  similarity using Jaccard token overlap. Requires 85% similarity threshold and
+  minimum 3-character company/role names to prevent false matches on generic
+  senders (e.g., promotional emails).
 
 ## Interview extraction
 - ICS invites are preferred and parsed for DTSTART, DTEND, LOCATION, URL, and TZID
