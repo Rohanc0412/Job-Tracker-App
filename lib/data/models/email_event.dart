@@ -11,7 +11,6 @@ class EmailEvent {
   final DateTime date;
   final String? extractedStatus;
   final String? extractedFieldsJson;
-  final String? evidenceSnippet;
   final String? rawBodyText;
   final String? rawBodyPath;
   final String? rawBodySha256;
@@ -32,7 +31,6 @@ class EmailEvent {
     required this.date,
     this.extractedStatus,
     this.extractedFieldsJson,
-    this.evidenceSnippet,
     this.rawBodyText,
     this.rawBodyPath,
     this.rawBodySha256,

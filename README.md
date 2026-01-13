@@ -99,6 +99,20 @@ Notes:
 - Raw bodies are stored locally under the app support directory in `raw_bodies/`
   when enabled (large bodies are compressed).
 
+## Local LLM (Ollama)
+Gmail filtering + extraction runs locally via Ollama on localhost only. No
+remote APIs are used.
+
+Install Ollama and pull models:
+- `ollama pull qwen2.5:3b-instruct`
+- `ollama pull qwen2.5:7b-instruct`
+
+Configure in Settings -> Local LLM:
+- Base URL (must be `http://127.0.0.1:11434` or `http://localhost:11434`)
+- Local model selector (3B or 7B)
+- Check model installed (shows `ollama pull <model>` if missing)
+- Timeout and max input chars
+
 ## Tests
 - `flutter test`
 

@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:job_tracker/data/db/db.dart';
 import 'package:job_tracker/services/gmail_sync_service.dart';
 import 'package:job_tracker/services/imap/imap_client.dart';
+import 'package:job_tracker/services/local_llm_pipeline.dart';
 import 'package:sqlite3/sqlite3.dart';
 
 import '../support/mock_imap_transport.dart';
@@ -15,6 +16,175 @@ final String? _sqliteSkipReason = configureSqliteForTests();
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('irrelevant output discards email and advances cursor', () async {
+    final tempDir = await Directory.systemTemp.createTemp('gmail_sync');
+    final db = AppDatabase(database: sqlite3.openInMemory());
+    await db.open();
+
+    final header = _headerText(uid: 99);
+    final body = 'Sale ends today.';
+    final script = [
+      ImapScriptStep(
+        command: 'LOGIN',
+        responses: ['{tag} OK LOGIN completed\r\n'],
+      ),
+      ImapScriptStep(
+        command: 'SELECT',
+        responses: [
+          '* OK [UIDVALIDITY 7] UIDs valid\r\n',
+          '{tag} OK SELECT completed\r\n',
+        ],
+      ),
+      ImapScriptStep(
+        command: 'UID SEARCH X-GM-RAW',
+        responses: ['* SEARCH 99\r\n', '{tag} OK SEARCH completed\r\n'],
+      ),
+      ImapScriptStep(
+        command: 'UID FETCH 99',
+        responses: _fetchResponses(uid: 99, header: header, body: body),
+      ),
+      ImapScriptStep(
+        command: 'LOGOUT',
+        responses: ['* BYE LOGOUT\r\n', '{tag} OK LOGOUT completed\r\n'],
+      ),
+    ];
+
+    final transport = MockImapTransport(script);
+    final client = ImapClient(transport: transport, maxLiteralBytes: 1024);
+    final config = _baseConfig(
+      rawBodiesDir: tempDir.path,
+      startDate: DateTime.utc(2026, 1, 1),
+      storeRawBody: false,
+      dbPath: 'memory',
+    );
+
+    final analyzer = StubLlmAnalyzer([
+      LlmEmailResult.irrelevant(
+        category: 'promotion',
+        confidence: 0.1,
+        reason: 'promo',
+      ),
+    ]);
+
+    final result = await GmailSyncRunner.run(
+      config,
+      client: client,
+      database: db,
+      llmAnalyzer: analyzer,
+    );
+
+    expect(result.inserted, 0);
+    final rows = db.rawDb.select(
+      "SELECT COUNT(*) AS count FROM email_events "
+      "WHERE provider = 'gmail' AND accountLabel = ?;",
+      ['user@example.com'],
+    );
+    expect((rows.first['count'] as num).toInt(), 0);
+
+    final cursorRows = db.rawDb.select(
+      'SELECT cursorKey, cursorValue FROM sync_state '
+      'WHERE provider = ? AND accountLabel = ? AND folder = ?;',
+      ['gmail', 'user@example.com', 'INBOX'],
+    );
+    final lastUidRow = cursorRows.firstWhere(
+      (row) => row['cursorKey'] == 'last_uid',
+    );
+    expect(lastUidRow['cursorValue'], '99');
+
+    await tempDir.delete(recursive: true);
+    await db.close();
+  }, skip: _sqliteSkipReason);
+
+  test('relevant output inserts email and stores llm fields', () async {
+    final tempDir = await Directory.systemTemp.createTemp('gmail_sync');
+    final db = AppDatabase(database: sqlite3.openInMemory());
+    await db.open();
+
+    final header = _headerText(uid: 100);
+    final body = 'Thanks for applying to Acme.';
+    final script = [
+      ImapScriptStep(
+        command: 'LOGIN',
+        responses: ['{tag} OK LOGIN completed\r\n'],
+      ),
+      ImapScriptStep(
+        command: 'SELECT',
+        responses: [
+          '* OK [UIDVALIDITY 9] UIDs valid\r\n',
+          '{tag} OK SELECT completed\r\n',
+        ],
+      ),
+      ImapScriptStep(
+        command: 'UID SEARCH X-GM-RAW',
+        responses: ['* SEARCH 100\r\n', '{tag} OK SEARCH completed\r\n'],
+      ),
+      ImapScriptStep(
+        command: 'UID FETCH 100',
+        responses: _fetchResponses(uid: 100, header: header, body: body),
+      ),
+      ImapScriptStep(
+        command: 'LOGOUT',
+        responses: ['* BYE LOGOUT\r\n', '{tag} OK LOGOUT completed\r\n'],
+      ),
+    ];
+
+    final transport = MockImapTransport(script);
+    final client = ImapClient(transport: transport, maxLiteralBytes: 1024);
+    final config = _baseConfig(
+      rawBodiesDir: tempDir.path,
+      startDate: DateTime.utc(2026, 1, 1),
+      storeRawBody: false,
+      dbPath: 'memory',
+    );
+    final analyzer = StubLlmAnalyzer([
+      _relevantResult(
+        summary: 'Acme confirmed your application.',
+        interview: const LlmInterview(
+          start: null,
+          end: null,
+          timezone: null,
+          location: null,
+          meetingUrl: null,
+        ),
+      ),
+    ]);
+
+    await GmailSyncRunner.run(
+      config,
+      client: client,
+      database: db,
+      llmAnalyzer: analyzer,
+    );
+
+    final rows = db.rawDb.select(
+      "SELECT llm_category, llm_confidence, llm_summary, llm_status, "
+      "llm_company, llm_role, llm_job_id, llm_portal_url, "
+      "llm_interview_tz, llm_evidence_json, llm_action_items_json "
+      "FROM email_events WHERE provider = 'gmail' AND accountLabel = ?;",
+      ['user@example.com'],
+    );
+    expect(rows.length, 1);
+    final row = rows.first;
+    expect(row['llm_category'], 'application_confirmation');
+    expect(row['llm_confidence'], closeTo(0.9, 0.001));
+    expect(row['llm_summary'], 'Acme confirmed your application.');
+    expect(row['llm_status'], 'applied');
+    expect(row['llm_company'], 'Acme Corp');
+    expect(row['llm_role'], 'Backend Engineer');
+    expect(row['llm_job_id'], 'REQ-1');
+    expect(row['llm_portal_url'], 'https://jobs.acme.test/REQ-1');
+    expect(row['llm_interview_tz'], isNull);
+
+    final evidence = jsonDecode(row['llm_evidence_json'] as String) as List;
+    expect(evidence.first['field'], 'company');
+    final actionItems =
+        jsonDecode(row['llm_action_items_json'] as String) as List;
+    expect(actionItems, ['Reply to recruiter']);
+
+    await tempDir.delete(recursive: true);
+    await db.close();
+  }, skip: _sqliteSkipReason);
 
   test('stores large raw body to file and truncates db text', () async {
     final tempDir = await Directory.systemTemp.createTemp('gmail_sync');
@@ -36,8 +206,12 @@ void main() {
         ],
       ),
       ImapScriptStep(
-        command: 'UID SEARCH SINCE',
+        command: 'UID SEARCH X-GM-RAW',
         responses: ['* SEARCH 101\r\n', '{tag} OK SEARCH completed\r\n'],
+      ),
+      ImapScriptStep(
+        command: 'UID FETCH 101',
+        responses: _fetchResponses(uid: 101, header: header, body: body),
       ),
       ImapScriptStep(
         command: 'UID FETCH 101',
@@ -51,34 +225,30 @@ void main() {
 
     final transport = MockImapTransport(script);
     final client = ImapClient(transport: transport, maxLiteralBytes: 1024);
-    final config = GmailSyncConfig(
-      email: 'user@example.com',
-      appPassword: 'app-pass',
-      folder: 'INBOX',
+    final config = _baseConfig(
+      rawBodiesDir: tempDir.path,
       startDate: DateTime.utc(2026, 1, 1),
       storeRawBody: true,
-      maxRawBodyBytes: 32,
-      hardCapBytes: 1024,
       dbPath: 'memory',
-      rawBodiesDir: tempDir.path,
+      maxRawBodyBytes: 32,
     );
+    final analyzer = StubLlmAnalyzer([_relevantResult()]);
 
     final result = await GmailSyncRunner.run(
       config,
       client: client,
       database: db,
+      llmAnalyzer: analyzer,
     );
 
     expect(result.inserted, 1);
     final rows = db.rawDb.select(
-      "SELECT evidenceSnippet, raw_body_text, raw_body_path, raw_body_sha256, raw_body_byte_len "
+      "SELECT raw_body_text, raw_body_path, raw_body_sha256, raw_body_byte_len "
       "FROM email_events WHERE provider = 'gmail' AND accountLabel = ?;",
       ['user@example.com'],
     );
     expect(rows.length, 1);
     final row = rows.first;
-    final snippet = row['evidenceSnippet'] as String;
-    expect(snippet.length <= 160, isTrue);
     final rawText = row['raw_body_text'] as String;
     expect(utf8.encode(rawText).length <= 32, isTrue);
     final path = row['raw_body_path'] as String;
@@ -98,7 +268,7 @@ void main() {
     await db.close();
   }, skip: _sqliteSkipReason);
 
-  test('raw body disabled stores only snippet and hashes', () async {
+  test('raw body disabled stores only hashes', () async {
     final tempDir = await Directory.systemTemp.createTemp('gmail_sync');
     final db = AppDatabase(database: sqlite3.openInMemory());
     await db.open();
@@ -118,7 +288,7 @@ void main() {
         ],
       ),
       ImapScriptStep(
-        command: 'UID SEARCH SINCE',
+        command: 'UID SEARCH X-GM-RAW',
         responses: ['* SEARCH 201\r\n', '{tag} OK SEARCH completed\r\n'],
       ),
       ImapScriptStep(
@@ -133,22 +303,19 @@ void main() {
 
     final transport = MockImapTransport(script);
     final client = ImapClient(transport: transport, maxLiteralBytes: 1024);
-    final config = GmailSyncConfig(
-      email: 'user@example.com',
-      appPassword: 'app-pass',
-      folder: 'INBOX',
+    final config = _baseConfig(
+      rawBodiesDir: tempDir.path,
       startDate: DateTime.utc(2026, 1, 1),
       storeRawBody: false,
-      maxRawBodyBytes: 64,
-      hardCapBytes: 1024,
       dbPath: 'memory',
-      rawBodiesDir: tempDir.path,
     );
+    final analyzer = StubLlmAnalyzer([_relevantResult()]);
 
     await GmailSyncRunner.run(
       config,
       client: client,
       database: db,
+      llmAnalyzer: analyzer,
     );
 
     final rows = db.rawDb.select(
@@ -189,7 +356,7 @@ void main() {
         ],
       ),
       ImapScriptStep(
-        command: 'UID SEARCH SINCE',
+        command: 'UID SEARCH X-GM-RAW',
         responses: ['* SEARCH 301 302\r\n', '{tag} OK SEARCH completed\r\n'],
       ),
       ImapScriptStep(
@@ -207,22 +374,21 @@ void main() {
     ];
     final clientFirst = ImapClient(
         transport: MockImapTransport(scriptFirst), maxLiteralBytes: 1024);
-    final config = GmailSyncConfig(
-      email: 'user@example.com',
-      appPassword: 'app-pass',
-      folder: 'INBOX',
+    final config = _baseConfig(
+      rawBodiesDir: tempDir.path,
       startDate: DateTime.utc(2026, 1, 1),
       storeRawBody: false,
-      maxRawBodyBytes: 64,
-      hardCapBytes: 1024,
       dbPath: 'memory',
-      rawBodiesDir: tempDir.path,
+    );
+    final analyzerFirst = StubLlmAnalyzer(
+      List.filled(2, _relevantResult()),
     );
 
     await GmailSyncRunner.run(
       config,
       client: clientFirst,
       database: db,
+      llmAnalyzer: analyzerFirst,
     );
 
     final scriptSecond = [
@@ -238,7 +404,7 @@ void main() {
         ],
       ),
       ImapScriptStep(
-        command: 'UID SEARCH UID 303:*',
+        command: 'UID SEARCH UID 303:* X-GM-RAW',
         responses: ['* SEARCH 303\r\n', '{tag} OK SEARCH completed\r\n'],
       ),
       ImapScriptStep(
@@ -252,11 +418,13 @@ void main() {
     ];
     final clientSecond = ImapClient(
         transport: MockImapTransport(scriptSecond), maxLiteralBytes: 1024);
+    final analyzerSecond = StubLlmAnalyzer([_relevantResult()]);
 
     await GmailSyncRunner.run(
       config.copyWith(startDate: null),
       client: clientSecond,
       database: db,
+      llmAnalyzer: analyzerSecond,
     );
 
     final rows = db.rawDb.select(
@@ -296,6 +464,30 @@ List<Object> _fetchResponses({
   ];
 }
 
+GmailSyncConfig _baseConfig({
+  required String rawBodiesDir,
+  required DateTime? startDate,
+  required bool storeRawBody,
+  required String dbPath,
+  int maxRawBodyBytes = 64,
+}) {
+  return GmailSyncConfig(
+    email: 'user@example.com',
+    appPassword: 'app-pass',
+    folder: 'INBOX',
+    startDate: startDate,
+    storeRawBody: storeRawBody,
+    maxRawBodyBytes: maxRawBodyBytes,
+    hardCapBytes: 1024,
+    dbPath: dbPath,
+    rawBodiesDir: rawBodiesDir,
+    llmBaseUrl: 'http://127.0.0.1:11434',
+    llmModelId: 'test-model',
+    llmRequestTimeoutMs: 1000,
+    llmMaxInputChars: 20000,
+  );
+}
+
 extension _GmailConfigCopy on GmailSyncConfig {
   GmailSyncConfig copyWith({
     DateTime? startDate,
@@ -310,6 +502,62 @@ extension _GmailConfigCopy on GmailSyncConfig {
       hardCapBytes: hardCapBytes,
       dbPath: dbPath,
       rawBodiesDir: rawBodiesDir,
+      skipSeed: skipSeed,
+      llmBaseUrl: llmBaseUrl,
+      llmModelId: llmModelId,
+      llmRequestTimeoutMs: llmRequestTimeoutMs,
+      llmMaxInputChars: llmMaxInputChars,
     );
   }
+}
+
+class StubLlmAnalyzer implements LlmEmailAnalyzer {
+  StubLlmAnalyzer(this._results);
+
+  final List<LlmEmailResult> _results;
+  var _index = 0;
+
+  @override
+  Future<LlmEmailResult> analyze(LlmEmailInput input) async {
+    final result =
+        _results[_index < _results.length ? _index : _results.length - 1];
+    _index++;
+    return result;
+  }
+}
+
+LlmEmailResult _relevantResult({
+  String summary = 'Application received from Acme.',
+  LlmInterview interview = const LlmInterview(
+    start: null,
+    end: null,
+    timezone: null,
+    location: null,
+    meetingUrl: null,
+  ),
+}) {
+  return LlmEmailResult.relevant(
+    category: 'application_confirmation',
+    confidence: 0.9,
+    extraction: LlmExtractedFields(
+      company: 'Acme Corp',
+      role: 'Backend Engineer',
+      jobId: 'REQ-1',
+      portalUrl: 'https://jobs.acme.test/REQ-1',
+      status: 'applied',
+      interview: interview,
+      summary: summary,
+      actionRequired: true,
+      actionItems: const ['Reply to recruiter'],
+      originalFromEmail: null,
+      originalToEmails: const [],
+      evidence: const [
+        LlmEvidence(
+          field: 'company',
+          source: 'subject',
+          quote: 'Acme',
+        ),
+      ],
+    ),
+  );
 }

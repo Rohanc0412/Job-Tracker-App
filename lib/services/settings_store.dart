@@ -9,6 +9,10 @@ class SettingsStore {
 
   static final SettingsStore instance = SettingsStore._();
 
+  factory SettingsStore.forTesting({Future<File> Function()? fileResolver}) {
+    return SettingsStore._(fileResolver: fileResolver);
+  }
+
   final Future<File> Function() _fileResolver;
   final Map<String, Object?> _values = {};
   bool _loaded = false;

@@ -4,18 +4,23 @@ import 'package:flutter/material.dart';
 import '../../data/db/db.dart';
 import '../../data/models/activity_item.dart';
 import '../../data/models/application.dart';
+import '../../data/models/email_review_item.dart';
 import '../../data/repo/application_repo.dart';
+import '../../data/repo/email_review_repo.dart';
 import '../../data/repo/sqlite_application_repo.dart';
 import '../../domain/status/status_types.dart';
 import '../../services/data_refresh_bus.dart';
+import '../../services/email_review_save_service.dart';
 import '../../services/gmail_settings.dart';
 import '../../services/gmail_sync_service.dart';
+import '../../services/local_llm_settings.dart';
 import '../../services/secrets_store.dart';
 import '../../services/settings_store.dart';
 import '../../services/app_data_paths.dart';
 import '../widgets/activity_tabs.dart';
 import '../widgets/app_table.dart';
 import '../widgets/details_panel.dart';
+import '../widgets/email_review_dialog.dart';
 import '../widgets/kpi_card.dart';
 import '../widgets/sidebar.dart';
 import '../widgets/topbar.dart';
@@ -51,12 +56,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
   int _upcomingDays = 14;
   bool _syncing = false;
   String? _syncStatus;
+  bool _syncComplete = false;
+  bool _syncCompleteNotified = false;
   String _searchQuery = '';
   late final VoidCallback _refreshListener;
+  late final EmailReviewRepo _reviewRepo;
+  late final EmailReviewSaveService _reviewSaveService;
+  final List<EmailReviewItem> _reviewQueue = [];
+  final ValueNotifier<ReviewDialogState> _reviewDialogState =
+      ValueNotifier(ReviewDialogState.empty());
+  final ValueNotifier<List<Application>> _applicationsNotifier =
+      ValueNotifier<List<Application>>([]);
+  bool _reviewDialogOpen = false;
 
   @override
   void initState() {
     super.initState();
+    _reviewRepo = EmailReviewRepo(AppDatabase.instance);
+    _reviewSaveService = EmailReviewSaveService(AppDatabase.instance);
     _loadFuture = _loadDashboard();
     _refreshListener = () {
       setState(() {
@@ -71,6 +88,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     widget.refreshListenable.removeListener(_refreshListener);
     _scrollController.dispose();
     _searchController.dispose();
+    _reviewDialogState.dispose();
+    _applicationsNotifier.dispose();
     super.dispose();
   }
 
@@ -89,6 +108,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _updates = updates;
         _upcoming = upcoming;
       });
+      _applicationsNotifier.value = List<Application>.from(apps);
       await _applySearch(forceTimeline: true);
     } catch (error) {
       if (!mounted) {
@@ -154,8 +174,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final emailValue = settings.get<String>(GmailSettingsKeys.email);
     final folder =
         settings.get<String>(GmailSettingsKeys.folder) ?? 'INBOX';
-    final storeRawBody =
-        settings.get<bool>(GmailSettingsKeys.storeRawBody) ?? true;
+    final storeRawBody = true;
     final startDateValue = settings.get<String>(GmailSettingsKeys.startDate);
     final startDate =
         startDateValue == null ? null : DateTime.tryParse(startDateValue);
@@ -189,7 +208,35 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     final dbPath = await AppDataPaths.databasePath();
     final rawBodiesDir = (await AppDataPaths.rawBodiesDir()).path;
+    final logFilePath = await AppDataPaths.logFilePath();
     final skipSeed = SettingsStore.instance.get<bool>('skipSeed') ?? false;
+    final llmModelId =
+        settings.get<String>(LocalLlmSettingsKeys.modelId) ??
+            LocalLlmDefaults.modelId;
+    final isOpenAiModel = llmModelId == kOpenAiModelId;
+    var llmBaseUrl =
+        settings.get<String>(LocalLlmSettingsKeys.baseUrl) ??
+            (isOpenAiModel
+                ? LocalLlmDefaults.openAiBaseUrl
+                : LocalLlmDefaults.baseUrl);
+    if (isOpenAiModel &&
+        llmBaseUrl.trim() == LocalLlmDefaults.baseUrl) {
+      llmBaseUrl = LocalLlmDefaults.openAiBaseUrl;
+    }
+    String? llmApiKey;
+    if (isOpenAiModel) {
+      llmApiKey = await SecretsStore().readOpenAiApiKey();
+      if (llmApiKey == null || llmApiKey.trim().isEmpty) {
+        _showSyncSnack('Add an OpenAI API key in Settings.');
+        return;
+      }
+    }
+    final llmTimeoutMs =
+        settings.get<int>(LocalLlmSettingsKeys.requestTimeoutMs) ??
+            LocalLlmDefaults.requestTimeoutMs;
+    final llmMaxInputChars =
+        settings.get<int>(LocalLlmSettingsKeys.maxInputChars) ??
+            LocalLlmDefaults.maxInputChars;
     final config = GmailSyncConfig(
       email: email,
       appPassword: creds.appPassword,
@@ -201,17 +248,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
       dbPath: dbPath,
       rawBodiesDir: rawBodiesDir,
       skipSeed: skipSeed,
+      llmBaseUrl: llmBaseUrl,
+      llmModelId: llmModelId,
+      llmRequestTimeoutMs: llmTimeoutMs,
+      llmMaxInputChars: llmMaxInputChars,
+      llmApiKey: llmApiKey,
+      logFilePath: logFilePath,
     );
 
     setState(() {
       _syncing = true;
       _syncStatus = 'Syncing...';
+      _syncComplete = false;
+      _syncCompleteNotified = false;
     });
+    _updateReviewDialogState();
 
     final service = GmailSyncService();
     var syncFailed = false;
-    final stream = service.startSync(config);
-    stream.listen((progress) {
+    final session = service.startSync(config);
+    session.progress.listen((progress) {
       if (!mounted) {
         return;
       }
@@ -230,7 +286,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
       setState(() {
         _syncing = false;
         _syncStatus = null;
+        _syncComplete = false;
       });
+      _updateReviewDialogState();
       _showSyncSnack('Sync failed: $error');
     }, onDone: () async {
       if (!mounted) {
@@ -239,11 +297,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
       setState(() {
         _syncing = false;
         _syncStatus = null;
+        _syncComplete = !syncFailed;
       });
+      _updateReviewDialogState();
       if (!syncFailed) {
-        DataRefreshBus.notify();
-        await _loadDashboard();
+        _maybeCloseReviewDialog();
       }
+    });
+
+    session.reviewEvents.listen((event) async {
+      await _handleReviewEvent(event);
     });
   }
 
@@ -254,6 +317,223 @@ class _DashboardScreenState extends State<DashboardScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message)),
     );
+  }
+
+  void _updateReviewDialogState() {
+    EmailReviewItem? readyItem;
+    for (final item in _reviewQueue) {
+      if (item.llmState == 'ready') {
+        readyItem = item;
+        break;
+      }
+    }
+    if (readyItem == null) {
+      for (final item in _reviewQueue) {
+        if (item.llmState == 'failed') {
+          readyItem = item;
+          break;
+        }
+      }
+    }
+    _reviewDialogState.value = ReviewDialogState(
+      item: readyItem,
+      queueCount: _reviewQueue.length,
+      syncInProgress: _syncing,
+      syncComplete: _syncComplete,
+    );
+  }
+
+  Future<void> _handleReviewEvent(GmailSyncReviewEvent event) async {
+    final item = await _reviewRepo.findById(event.reviewId);
+    if (item == null || item.reviewState != 'pending') {
+      return;
+    }
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      final index = _reviewQueue.indexWhere((entry) => entry.id == item.id);
+      if (index == -1) {
+        _reviewQueue.add(item);
+      } else {
+        _reviewQueue[index] = item;
+      }
+    });
+    _updateReviewDialogState();
+    if (!_reviewDialogOpen) {
+      _openReviewDialog();
+    }
+  }
+
+  void _openReviewDialog() {
+    if (!mounted || _reviewDialogOpen) {
+      return;
+    }
+    _reviewDialogOpen = true;
+    _updateReviewDialogState();
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (_) {
+        return EmailReviewDialog(
+          state: _reviewDialogState,
+          applications: _applicationsNotifier,
+          onSave: _handleReviewSave,
+          onDiscard: _handleReviewDiscard,
+          onPersistDraft: _persistReviewDraft,
+        );
+      },
+    ).whenComplete(() {
+      _reviewDialogOpen = false;
+      if (mounted && _reviewQueue.isNotEmpty) {
+        _showReviewResumeSnack();
+      }
+    });
+  }
+
+  void _showReviewResumeSnack() {
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Review paused (${_reviewQueue.length} remaining).'),
+        action: SnackBarAction(
+          label: 'Resume',
+          onPressed: _openReviewDialog,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _persistReviewDraft(
+    EmailReviewItem item,
+    ReviewDraft draft,
+  ) async {
+    final overrides = draft.toOverridesMap();
+    final storedSelection =
+        draft.forceNewApplication ? '__new__' : draft.selectedApplicationId;
+    await _reviewRepo.updateUserOverrides(
+      item.id,
+      overrides,
+      selectedApplicationId: storedSelection,
+    );
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      final index = _reviewQueue.indexWhere((entry) => entry.id == item.id);
+      if (index != -1) {
+        _reviewQueue[index] = item.copyWith(
+          userOverrides: overrides,
+          selectedApplicationId: storedSelection,
+          updatedAt: DateTime.now().toUtc(),
+        );
+      }
+    });
+    _updateReviewDialogState();
+  }
+
+  Future<void> _handleReviewSave(
+    EmailReviewItem item,
+    ReviewDraft draft,
+  ) async {
+    final overrides = draft.toOverridesMap();
+    final selectedApplicationId = draft.selectedApplicationId;
+    final storedSelection =
+        draft.forceNewApplication ? '__new__' : selectedApplicationId;
+    try {
+      await _reviewRepo.updateUserOverrides(
+        item.id,
+        overrides,
+        selectedApplicationId: storedSelection,
+      );
+      final updatedItem = item.copyWith(
+        userOverrides: overrides,
+        selectedApplicationId: storedSelection,
+        updatedAt: DateTime.now().toUtc(),
+      );
+      await _reviewSaveService.saveReview(
+        item: updatedItem,
+        overrides: overrides,
+        selectedApplicationId: selectedApplicationId,
+        forceNewApplication: draft.forceNewApplication,
+      );
+      await _reviewRepo.markReviewState(item.id, 'saved');
+      if (!mounted) {
+        return;
+      }
+      await _refreshApplicationsQuick();
+      _removeReviewItem(item.id);
+      DataRefreshBus.notify();
+      await _loadDashboard();
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      _showSyncSnack('Save failed: $error');
+    }
+  }
+
+  Future<void> _refreshApplicationsQuick() async {
+    try {
+      final apps = await widget.repo.listApplications();
+      if (!mounted) {
+        return;
+      }
+      setState(() => _applications = apps);
+      _applicationsNotifier.value = List<Application>.from(apps);
+      await _applySearch(forceTimeline: true);
+    } catch (_) {
+      // Ignore refresh errors; the full dashboard refresh will retry.
+    }
+  }
+
+  Future<void> _handleReviewDiscard(
+    EmailReviewItem item,
+    ReviewDraft draft,
+  ) async {
+    final overrides = draft.toOverridesMap();
+    final storedSelection =
+        draft.forceNewApplication ? '__new__' : draft.selectedApplicationId;
+    try {
+      await _reviewRepo.updateUserOverrides(
+        item.id,
+        overrides,
+        selectedApplicationId: storedSelection,
+      );
+      await _reviewRepo.markReviewState(item.id, 'discarded');
+      if (!mounted) {
+        return;
+      }
+      _removeReviewItem(item.id);
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      _showSyncSnack('Discard failed: $error');
+    }
+  }
+
+  void _removeReviewItem(String id) {
+    setState(() {
+      _reviewQueue.removeWhere((item) => item.id == id);
+    });
+    _updateReviewDialogState();
+    _maybeCloseReviewDialog();
+  }
+
+  void _maybeCloseReviewDialog() {
+    if (!_syncComplete || _reviewQueue.isNotEmpty) {
+      return;
+    }
+    if (_reviewDialogOpen && mounted) {
+      Navigator.of(context, rootNavigator: true).pop();
+    }
+    if (!_syncCompleteNotified) {
+      _syncCompleteNotified = true;
+      _showSyncSnack('Sync completed');
+    }
   }
 
   Future<void> _loadUpcoming(int days) async {
@@ -378,6 +658,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     onSync: _startGmailSync,
                     syncInProgress: _syncing,
                     syncLabel: _syncStatus,
+                    reviewCount: _reviewQueue.length,
+                    onReview: _openReviewDialog,
                     searchController: _searchController,
                     onSearchChanged: _onSearchChanged,
                   ),

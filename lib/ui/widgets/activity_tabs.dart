@@ -304,6 +304,9 @@ class _ActivityListItemState extends State<_ActivityListItem> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final detail = widget.item.detail.trim();
+    final showDetail =
+        detail.isNotEmpty && detail != widget.item.title.trim();
 
     final content = Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -334,13 +337,17 @@ class _ActivityListItemState extends State<_ActivityListItem> {
                       widget.item.title,
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      widget.item.detail,
-                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                            color: colorScheme.onSurfaceVariant,
-                          ),
-                    ),
+                    if (showDetail) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        detail,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                      ),
+                    ],
                   ],
                 ),
               ),

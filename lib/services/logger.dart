@@ -1,15 +1,36 @@
+import 'dart:io';
+
 import 'package:logging/logging.dart';
 
 class AppLogger {
   static Logger get log => Logger('JobTracker');
+  static bool _redactMessages = true;
+  static String? _logFilePath;
 
-  static void setup({Level level = Level.INFO}) {
+  static void setup({
+    Level level = Level.INFO,
+    bool redactMessages = true,
+    String? logFilePath,
+  }) {
+    _redactMessages = redactMessages;
+    _logFilePath = logFilePath;
     Logger.root.level = level;
     Logger.root.onRecord.listen((record) {
-      final message = redact(record.message);
+      final message =
+          _redactMessages ? redact(record.message) : record.message;
+      final line = '[${record.level.name}] ${record.time}: $message';
       // Simple console output for now.
       // ignore: avoid_print
-      print('[${record.level.name}] ${record.time}: $message');
+      print(line);
+      final path = _logFilePath;
+      if (path != null && path.isNotEmpty) {
+        try {
+          final file = File(path);
+          file.writeAsStringSync('$line\n', mode: FileMode.append);
+        } catch (_) {
+          // Best effort logging; ignore file errors.
+        }
+      }
     });
   }
 

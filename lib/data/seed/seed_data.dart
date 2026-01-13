@@ -186,7 +186,6 @@ class SeedData {
       date: DateTime(2026, 1, 9, 9, 15),
       extractedStatus: 'assessment',
       extractedFieldsJson: '{"assessment":"take-home"}',
-      evidenceSnippet: 'Assessment link delivered for review.',
       rawBodyText: '''Hello,
 
 Thank you for your interest in the ML Engineer role at Delta Dynamics. We were impressed with your background and would like to move forward with the next step.
@@ -217,7 +216,6 @@ Delta Dynamics Hiring Team''',
       date: DateTime(2026, 1, 8, 13, 40),
       extractedStatus: 'interview',
       extractedFieldsJson: '{"stage":"phone screen"}',
-      evidenceSnippet: 'Interview scheduled for Jan 15, 2:00 PM.',
       rawBodyText: '''Hi there,
 
 Great news! We'd like to schedule a phone screen interview with you for the Software Engineer position at Acme Robotics.
@@ -252,7 +250,6 @@ Acme Robotics Recruiting Team''',
       date: DateTime(2026, 1, 6, 16, 5),
       extractedStatus: 'offer',
       extractedFieldsJson: '{"offer":"extended"}',
-      evidenceSnippet: 'Offer package shared and ready for review.',
       rawBodyText: '''Dear Candidate,
 
 Congratulations! We're excited to extend an offer for the Product Manager position at Futura Mobility.
@@ -292,7 +289,6 @@ Futura Mobility''',
       date: DateTime(2026, 1, 5, 11, 20),
       extractedStatus: 'underReview',
       extractedFieldsJson: '{"status":"under_review"}',
-      evidenceSnippet: 'Recruiter reviewed application.',
       rawBodyText: '''Hello,
 
 Thank you for applying for the Backend Developer position at Cloud Harbor.
@@ -320,7 +316,6 @@ Cloud Harbor Careers Team''',
       date: DateTime(2026, 1, 3, 8, 45),
       extractedStatus: 'received',
       extractedFieldsJson: '{"status":"received"}',
-      evidenceSnippet: 'Application received and logged.',
       rawBodyText: '''Dear Applicant,
 
 Thank you for your application for the DevOps Engineer position at Granite Systems. We have received your resume and it has been logged in our system.
@@ -349,7 +344,6 @@ Granite Systems HR''',
       date: DateTime(2025, 12, 26, 10, 10),
       extractedStatus: 'rejected',
       extractedFieldsJson: '{"status":"closed"}',
-      evidenceSnippet: 'Position closed.',
       rawBodyText: '''Dear Candidate,
 
 Thank you for your interest in the QA Engineer position at Evergreen Health.

@@ -8,25 +8,30 @@ import '../domain/ingestion/dedup.dart';
 import '../domain/ingestion/parser_rules.dart';
 import '../domain/ingestion/status_engine.dart';
 import '../domain/status/status_types.dart';
+import 'email_text_extractor.dart';
 
 class FixtureIngestionPipeline {
   FixtureIngestionPipeline(
     this._database, {
     String provider = 'fixture',
     bool cleanupFixtureApps = true,
+    bool applyRulesBasedRoleSourceExtraction = true,
   })  : _provider = provider,
-        _cleanupFixtureApps = cleanupFixtureApps;
+        _cleanupFixtureApps = cleanupFixtureApps,
+        _applyRulesBasedRoleSourceExtraction =
+            applyRulesBasedRoleSourceExtraction;
 
   final AppDatabase _database;
   final String _provider;
   final bool _cleanupFixtureApps;
+  final bool _applyRulesBasedRoleSourceExtraction;
 
   Future<int> run() async {
     await _database.open();
     final db = _database.rawDb;
 
     final emailRows = db.select(
-      'SELECT id, applicationId, accountLabel, subject, evidenceSnippet, '
+      'SELECT id, applicationId, accountLabel, subject, '
       'raw_body_text, fromAddr, date, extractedFieldsJson, messageId '
       'FROM email_events WHERE provider = ? ORDER BY date ASC;',
       [_provider],
@@ -51,7 +56,7 @@ class FixtureIngestionPipeline {
     final updateEmailStmt = db.prepare(
       'UPDATE email_events '
       'SET applicationId = ?, extractedStatus = ?, extractedFieldsJson = ?, '
-      'evidenceSnippet = ?, isSignificantUpdate = ? '
+      'isSignificantUpdate = ? '
       'WHERE id = ?;',
     );
     final updateInterviewStmt = db.prepare(
@@ -65,10 +70,10 @@ class FixtureIngestionPipeline {
     for (final row in emailRows) {
       final emailId = row['id'] as String;
       final appId = row['applicationId'] as String;
-      final subject = (row['subject'] as String?) ?? '';
-      final body = (row['raw_body_text'] as String?) ??
-          (row['evidenceSnippet'] as String?) ??
-          '';
+      final subject = EmailTextExtractor.decodeMimeHeader(
+          (row['subject'] as String?) ?? '');
+      final rawBody = (row['raw_body_text'] as String?) ?? '';
+      final body = EmailTextExtractor.extractCleanText(rawBody);
       final fromAddr = (row['fromAddr'] as String?) ?? '';
       final accountLabel = (row['accountLabel'] as String?) ?? 'Fixture';
       final date = DateTime.parse(row['date'] as String);
@@ -81,6 +86,7 @@ class FixtureIngestionPipeline {
       final urls = extractUrls(extractionText);
       final portalUrl = selectPortalUrl(urls);
       final jobId = extractJobId(extractionText, portalUrl: portalUrl);
+      // Company/role come from parser rules; role/source updates can be gated below.
       final company = extractCompany(subject, body, fromAddr);
       final role = extractRole(subject, body);
 
@@ -119,16 +125,26 @@ class FixtureIngestionPipeline {
         incoming: classification,
       );
 
+      final nextRole = _applyRulesBasedRoleSourceExtraction
+          ? (role ?? currentApp.role)
+          : currentApp.role;
+      final nextJobId = _applyRulesBasedRoleSourceExtraction
+          ? (jobId ?? currentApp.jobId)
+          : currentApp.jobId;
+      final nextPortalUrl = _applyRulesBasedRoleSourceExtraction
+          ? (portalUrl ?? currentApp.portalUrl)
+          : currentApp.portalUrl;
       final updated = currentApp.copyWith(
         company: company ?? currentApp.company,
-        role: role ?? currentApp.role,
-        jobId: jobId ?? currentApp.jobId,
-        portalUrl: portalUrl ?? currentApp.portalUrl,
+        role: nextRole,
+        jobId: nextJobId,
+        portalUrl: nextPortalUrl,
         appliedOn: _minDate(currentApp.appliedOn, date),
         lastUpdated: _maxDate(currentApp.lastUpdated, date),
         status: decision.status,
         confidence: decision.confidence,
         account: currentApp.account.isEmpty ? accountLabel : currentApp.account,
+        // Preserve existing sourceLabel (set on initial insert); default to Fixture if missing.
         source: currentApp.source.isEmpty ? 'Fixture' : currentApp.source,
         nextStep: nextStep,
         nextStepAt: nextStepAt,
@@ -149,9 +165,11 @@ class FixtureIngestionPipeline {
           statusChanged || _isSignificantStatus(classification.status);
 
       extractedFields['company'] = company;
-      extractedFields['role'] = role;
-      extractedFields['portalUrl'] = portalUrl;
-      extractedFields['jobId'] = jobId;
+      if (_applyRulesBasedRoleSourceExtraction) {
+        extractedFields['role'] = role;
+        extractedFields['portalUrl'] = portalUrl;
+        extractedFields['jobId'] = jobId;
+      }
       extractedFields['status'] = classification.status.name;
       extractedFields['confidence'] = classification.confidence;
       if (interviewSchedule != null) {
@@ -166,12 +184,10 @@ class FixtureIngestionPipeline {
         }
       }
 
-      final snippet = _truncate(body, 160);
       updateEmailStmt.execute([
         selectedAppId,
         classification.status.name,
         jsonEncode(extractedFields),
-        snippet,
         isSignificant ? 1 : 0,
         emailId,
       ]);
@@ -596,14 +612,6 @@ class FixtureIngestionPipeline {
         status == ApplicationStatus.assessment ||
         status == ApplicationStatus.offer ||
         status == ApplicationStatus.rejected;
-  }
-
-  String _truncate(String value, int maxLength) {
-    final trimmed = value.trim();
-    if (trimmed.length <= maxLength) {
-      return trimmed;
-    }
-    return '${trimmed.substring(0, maxLength - 3).trimRight()}...';
   }
 
 }

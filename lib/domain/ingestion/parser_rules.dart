@@ -109,6 +109,8 @@ String? extractJobId(String text, {String? portalUrl}) {
 }
 
 String? extractCompany(String subject, String body, String fromAddr) {
+  // Precedence: subject text (unless skipped) -> body text -> sender display name
+  // (only if not a person) -> sender domain -> sender display as last resort.
   final subjectCompany =
       _shouldSkipSubjectCompany(subject) ? null : _extractCompanyFromText(subject);
   if (subjectCompany != null) {
@@ -130,6 +132,7 @@ String? extractCompany(String subject, String body, String fromAddr) {
 }
 
 String? extractRole(String subject, String body) {
+  // Precedence: subject text match, then body text match.
   final roleFromSubject = _extractRoleFromText(subject);
   if (roleFromSubject != null) {
     return roleFromSubject;

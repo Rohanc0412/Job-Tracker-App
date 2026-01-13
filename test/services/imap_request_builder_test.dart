@@ -10,6 +10,14 @@ void main() {
     expect(fetch.toUpperCase().contains('STORE'), isFalse);
   });
 
+  test('full fetch uses BODY.PEEK without flag updates', () {
+    final builder = ImapRequestBuilder();
+    final fetch = builder.uidFetchHeadersAndBodyFull(10);
+    expect(fetch, contains('BODY.PEEK'));
+    expect(fetch.contains('<0.'), isFalse);
+    expect(fetch.toUpperCase().contains('STORE'), isFalse);
+  });
+
   test('commands avoid STORE', () {
     final builder = ImapRequestBuilder();
     final commands = [
@@ -22,5 +30,17 @@ void main() {
     for (final cmd in commands) {
       expect(cmd.toUpperCase().contains('STORE'), isFalse);
     }
+  });
+
+  test('gmail raw query uses lenient inbox filter', () {
+    final builder = ImapRequestBuilder();
+    final command = builder.uidSearchJobApplications(
+      DateTime.utc(2026, 1, 1),
+      gmailRaw: true,
+    );
+    expect(command, contains('X-GM-RAW'));
+    expect(command, contains('in:inbox'));
+    expect(command, contains('after:2026/01/01'));
+    expect(command, contains('-category:promotions'));
   });
 }

@@ -35,10 +35,14 @@ class RawBodyStorage {
     required Uint8List bodyBytes,
     required int reportedByteLen,
     required bool storeRawBody,
+    String? decodedText,
   }) async {
     final byteLen =
         reportedByteLen > 0 ? reportedByteLen : bodyBytes.length;
-    final sha = sha256.convert(bodyBytes).toString();
+
+    final text = decodedText ?? utf8.decode(bodyBytes, allowMalformed: true);
+    final textBytes = utf8.encode(text);
+    final sha = sha256.convert(textBytes).toString();
 
     if (!storeRawBody) {
       return RawBodyStorageResult(
@@ -49,21 +53,26 @@ class RawBodyStorage {
       );
     }
 
-    if (bodyBytes.length <= maxRawBodyBytes) {
+    if (textBytes.length <= maxRawBodyBytes) {
       return RawBodyStorageResult(
-        rawBodyText: utf8.decode(bodyBytes, allowMalformed: true),
+        rawBodyText: text,
         rawBodyPath: null,
         rawBodySha256: sha,
         rawBodyByteLen: byteLen,
       );
     }
 
-    final truncatedBytes = bodyBytes.sublist(0, maxRawBodyBytes);
+    final truncatedBytes = textBytes.sublist(
+      0,
+      textBytes.length < maxRawBodyBytes
+          ? textBytes.length
+          : maxRawBodyBytes,
+    );
     final rawText = utf8.decode(truncatedBytes, allowMalformed: true);
     final fileName = '$sha.gz';
     final path = p.join(rawBodiesDir, fileName);
     final file = File(path);
-    final compressed = gzip.encode(bodyBytes);
+    final compressed = gzip.encode(textBytes);
     await file.writeAsBytes(compressed, flush: true);
     return RawBodyStorageResult(
       rawBodyText: rawText,

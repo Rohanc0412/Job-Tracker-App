@@ -383,14 +383,6 @@ class _TimelineItemState extends State<_TimelineItem> {
                         widget.item.title,
                         style: Theme.of(context).textTheme.bodyMedium,
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        widget.item.detail,
-                        style:
-                            Theme.of(context).textTheme.labelMedium?.copyWith(
-                                  color: colorScheme.onSurfaceVariant,
-                                ),
-                      ),
                     ],
                   ),
                 ),

@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -23,12 +25,14 @@ class AppTable extends StatefulWidget {
   final List<Application> applications;
   final String? selectedId;
   final ValueChanged<Application> onSelected;
+  final double maxBodyHeight;
 
   const AppTable({
     super.key,
     required this.applications,
     required this.selectedId,
     required this.onSelected,
+    this.maxBodyHeight = 360,
   });
 
   @override
@@ -39,6 +43,7 @@ class _AppTableState extends State<AppTable> {
   bool _ascending = false;
   ApplicationStatus? _statusFilter;
   String? _accountFilter;
+  final ScrollController _rowsScrollController = ScrollController();
 
   List<String> get _accounts {
     final values = widget.applications.map((app) => app.account).toSet().toList()
@@ -61,6 +66,12 @@ class _AppTableState extends State<AppTable> {
           _accountFilter == null || app.account == _accountFilter;
       return statusMatch && accountMatch;
     }).toList();
+  }
+
+  @override
+  void dispose() {
+    _rowsScrollController.dispose();
+    super.dispose();
   }
 
   Color _statusColor(ApplicationStatus status, ColorScheme scheme) {
@@ -89,6 +100,10 @@ class _AppTableState extends State<AppTable> {
     final rows = _sorted;
     final statusLabel = _statusFilter?.label ?? 'All';
     final accountLabel = _accountFilter ?? 'All';
+    final maxBodyHeight = min(
+      widget.maxBodyHeight,
+      MediaQuery.of(context).size.height * 0.45,
+    );
 
     return Card(
       child: Padding(
@@ -158,116 +173,135 @@ class _AppTableState extends State<AppTable> {
                       },
                     ),
                     const SizedBox(height: 8),
-                    if (rows.isEmpty)
-                      SizedBox(
-                        height: 160,
-                        child: Center(
-                          child: Text(
-                            'No applications match the selected filters',
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodyMedium
-                                ?.copyWith(
-                                  color: colorScheme.onSurfaceVariant,
+                    ConstrainedBox(
+                      constraints: BoxConstraints(maxHeight: maxBodyHeight),
+                      child: rows.isEmpty
+                          ? SizedBox(
+                              height: 160,
+                              child: Center(
+                                child: Text(
+                                  'No applications match the selected filters',
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodyMedium
+                                      ?.copyWith(
+                                        color: colorScheme.onSurfaceVariant,
+                                      ),
                                 ),
-                          ),
-                        ),
-                      )
-                    else
-                      Column(
-                        children: [
-                          for (var i = 0; i < rows.length; i++) ...[
-                            Builder(builder: (context) {
-                              final application = rows[i];
-                              final selected =
-                                  application.id == widget.selectedId;
-                              final statusColor = _statusColor(
-                                  application.status, colorScheme);
+                              ),
+                            )
+                          : Scrollbar(
+                              controller: _rowsScrollController,
+                              thumbVisibility: true,
+                              child: SingleChildScrollView(
+                                controller: _rowsScrollController,
+                                child: Column(
+                                  children: [
+                                    for (var i = 0; i < rows.length; i++) ...[
+                                      Builder(builder: (context) {
+                                        final application = rows[i];
+                                        final selected =
+                                            application.id == widget.selectedId;
+                                        final statusColor = _statusColor(
+                                            application.status, colorScheme);
 
-                              return InkWell(
-                                onTap: () => widget.onSelected(application),
-                                borderRadius: BorderRadius.circular(12),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 10, vertical: 12),
-                                  decoration: BoxDecoration(
-                                    color: selected
-                                        ? colorScheme.primary.withOpacity(0.12)
-                                        : Colors.transparent,
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      _Cell(
-                                        width: _companyWidth,
-                                        child: Text(
-                                          application.company,
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .bodyMedium
-                                              ?.copyWith(
-                                                  fontWeight: FontWeight.w600),
-                                        ),
-                                      ),
-                                      _Cell(
-                                        width: _roleWidth,
-                                        child: Text(application.role),
-                                      ),
-                                      _Cell(
-                                        width: _statusWidth,
-                                        child: Align(
-                                          alignment: Alignment.centerLeft,
+                                        return InkWell(
+                                          onTap: () =>
+                                              widget.onSelected(application),
+                                          borderRadius:
+                                              BorderRadius.circular(12),
                                           child: Container(
                                             padding: const EdgeInsets.symmetric(
-                                              horizontal: 10,
-                                              vertical: 4,
-                                            ),
+                                                horizontal: 10, vertical: 12),
                                             decoration: BoxDecoration(
-                                              color:
-                                                  statusColor.withOpacity(0.2),
+                                              color: selected
+                                                  ? colorScheme.primary
+                                                      .withOpacity(0.12)
+                                                  : Colors.transparent,
                                               borderRadius:
-                                                  BorderRadius.circular(16),
+                                                  BorderRadius.circular(12),
                                             ),
-                                            child: Text(
-                                              application.status.label,
-                                              style: Theme.of(context)
-                                                  .textTheme
-                                                  .labelMedium
-                                                  ?.copyWith(
-                                                      color: statusColor),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                _Cell(
+                                                  width: _companyWidth,
+                                                  child: Text(
+                                                    application.company,
+                                                    style: Theme.of(context)
+                                                        .textTheme
+                                                        .bodyMedium
+                                                        ?.copyWith(
+                                                          fontWeight:
+                                                              FontWeight.w600,
+                                                        ),
+                                                  ),
+                                                ),
+                                                _Cell(
+                                                  width: _roleWidth,
+                                                  child: Text(application.role),
+                                                ),
+                                                _Cell(
+                                                  width: _statusWidth,
+                                                  child: Align(
+                                                    alignment:
+                                                        Alignment.centerLeft,
+                                                    child: Container(
+                                                      padding: const EdgeInsets
+                                                          .symmetric(
+                                                        horizontal: 10,
+                                                        vertical: 4,
+                                                      ),
+                                                      decoration: BoxDecoration(
+                                                        color: statusColor
+                                                            .withOpacity(0.2),
+                                                        borderRadius:
+                                                            BorderRadius.circular(
+                                                                16),
+                                                      ),
+                                                      child: Text(
+                                                        application.status.label,
+                                                        style: Theme.of(context)
+                                                            .textTheme
+                                                            .labelMedium
+                                                            ?.copyWith(
+                                                              color: statusColor,
+                                                            ),
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ),
+                                                _Cell(
+                                                  width: _confidenceWidth,
+                                                  child: Text(
+                                                      '${application.confidence}%'),
+                                                ),
+                                                _Cell(
+                                                  width: _updatedWidth,
+                                                  child: Text(dateFormat.format(
+                                                      application.lastUpdated)),
+                                                ),
+                                                _Cell(
+                                                  width: _accountWidth,
+                                                  child: Text(application.account),
+                                                ),
+                                                _Cell(
+                                                  width: _sourceWidth,
+                                                  child: Text(application.source),
+                                                ),
+                                              ],
                                             ),
                                           ),
-                                        ),
-                                      ),
-                                      _Cell(
-                                        width: _confidenceWidth,
-                                        child: Text(
-                                            '${application.confidence}%'),
-                                      ),
-                                      _Cell(
-                                        width: _updatedWidth,
-                                        child: Text(dateFormat
-                                            .format(application.lastUpdated)),
-                                      ),
-                                      _Cell(
-                                        width: _accountWidth,
-                                        child: Text(application.account),
-                                      ),
-                                      _Cell(
-                                        width: _sourceWidth,
-                                        child: Text(application.source),
-                                      ),
+                                        );
+                                      }),
+                                      if (i != rows.length - 1)
+                                        Divider(color: colorScheme.outlineVariant),
                                     ],
-                                  ),
+                                  ],
                                 ),
-                              );
-                            }),
-                            if (i != rows.length - 1)
-                              Divider(color: colorScheme.outlineVariant),
-                          ],
-                        ],
-                      ),
+                              ),
+                            ),
+                    ),
                   ],
                 ),
               ),

@@ -104,5 +104,131 @@ Nimbus Analytics Recruiting''';
       expect(preview, equals(shortText));
       expect(preview, isNot(contains('...')));
     });
+
+    test('normalizeSeparators normalizes common delimiters', () {
+      const rawText = 'Role | Data Analyst\u00b7Remote\u2014Full-time';
+      final normalized = EmailTextExtractor.normalizeSeparators(rawText);
+
+      expect(normalized, contains('Role : Data Analyst-Remote-Full-time'));
+    });
+
+    test('reply chain stripping works', () {
+      const rawText = '''Thanks for the update.
+
+-----Original Message-----
+From: Hiring Team <jobs@example.com>
+Sent: Monday, Jan 1, 2024 9:00 AM
+To: Rohan <rohan@example.com>
+Subject: Interview request''';
+
+      final cleaned = EmailTextExtractor.extractCleanText(rawText);
+
+      expect(cleaned, contains('Thanks for the update.'));
+      expect(cleaned, isNot(contains('Original Message')));
+      expect(cleaned, isNot(contains('Interview request')));
+    });
+
+    test('disclaimer stripping works', () {
+      const rawText = '''Hello Rohan,
+
+We received your application.
+
+This email and any attachments are confidential.''';
+
+      final cleaned = EmailTextExtractor.extractCleanText(rawText);
+
+      expect(cleaned, contains('We received your application.'));
+      expect(cleaned, isNot(contains('This email and any attachments')));
+    });
+
+    test('topSection keeps only the first N non-empty lines', () {
+      const rawText = '''Line 1
+
+Line 2
+Line 3
+
+Line 4''';
+
+      final top = EmailTextExtractor.topSection(rawText, maxLines: 2);
+
+      expect(top, equals('Line 1\nLine 2'));
+    });
+
+    test('extractCleanText removes multipart boundaries and headers', () {
+      const rawText = '''--boundary123
+Content-Type: text/plain; charset="UTF-8"
+
+Hello there
+--boundary123
+Content-Type: text/html; charset="UTF-8"
+
+<p>Hello there</p>
+--boundary123--''';
+
+      final cleaned = EmailTextExtractor.extractCleanText(rawText);
+
+      expect(cleaned, equals('Hello there'));
+      expect(cleaned, isNot(contains('Content-Type:')));
+      expect(cleaned, isNot(contains('--boundary123')));
+    });
+
+    test('decodeMimeHeader decodes encoded-word subjects', () {
+      const encoded = '=?UTF-8?B?SGVsbG8gV29ybGQh?=';
+      final decoded = EmailTextExtractor.decodeMimeHeader(encoded);
+
+      expect(decoded, equals('Hello World!'));
+    });
+
+    test('decodeMimeHeader handles windows-1252 encoded words', () {
+      const encoded = '=?windows-1252?Q?Hello_=93World=94?=';
+      final decoded = EmailTextExtractor.decodeMimeHeader(encoded);
+
+      expect(decoded, equals('Hello “World”'));
+    });
+
+    test('extractCleanText keeps forwarded content when header block is top', () {
+      const rawText = '''________________________________
+From: noreply@example.com
+Sent: Wed, 10 Dec 2025 20:41
+To: me@example.com
+Subject: Application Confirmation
+
+Your application has been received.
+Thank you.''';
+
+      final cleaned = EmailTextExtractor.extractCleanText(rawText);
+
+      expect(cleaned, contains('Your application has been received.'));
+      expect(cleaned, isNot(contains('From: noreply@example.com')));
+    });
+
+    test('extractCleanText keeps reply content and strips quoted thread', () {
+      const rawText = '''Thanks — confirmed!
+
+On Mon, Jan 1, 2024 at 9:00 AM Hiring Team <jobs@example.com> wrote:
+> From: Hiring Team <jobs@example.com>
+> Sent: Monday, Jan 1, 2024 9:00 AM
+> To: Me <me@example.com>
+> Subject: Interview request
+>
+> Original message body.''';
+
+      final cleaned = EmailTextExtractor.extractCleanText(rawText);
+
+      expect(cleaned, contains('Thanks'));
+      expect(cleaned, contains('confirmed!'));
+      expect(cleaned, isNot(contains('Original message body')));
+    });
+
+    test('extractCleanText avoids empty output for quote-only replies', () {
+      const rawText = '''On Mon, Jan 1, 2024 at 9:00 AM Hiring Team wrote:
+> Hello there
+> This is the original message.''';
+
+      final cleaned = EmailTextExtractor.extractCleanText(rawText);
+
+      expect(cleaned, contains('Hello there'));
+      expect(cleaned, isNot(equals('')));
+    });
   });
 }

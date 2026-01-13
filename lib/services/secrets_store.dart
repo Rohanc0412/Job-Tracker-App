@@ -60,6 +60,7 @@ class SecretsStore {
   static const String _gmailAppPasswordKey = '${_prefix}gmail.app_password';
   static const String _msAccessTokenKey = '${_prefix}ms.access_token';
   static const String _msRefreshTokenKey = '${_prefix}ms.refresh_token';
+  static const String _openAiApiKey = '${_prefix}openai.api_key';
 
   SecretsStore({SecureStorage? storage})
       : _storage = storage ?? const FlutterSecureStorageAdapter();
@@ -111,6 +112,18 @@ class SecretsStore {
   Future<void> clearMicrosoftTokens() async {
     await _storage.delete(key: _msAccessTokenKey);
     await _storage.delete(key: _msRefreshTokenKey);
+  }
+
+  Future<void> saveOpenAiApiKey(String apiKey) async {
+    await _storage.write(key: _openAiApiKey, value: apiKey);
+  }
+
+  Future<String?> readOpenAiApiKey() async {
+    return _storage.read(key: _openAiApiKey);
+  }
+
+  Future<void> clearOpenAiApiKey() async {
+    await _storage.delete(key: _openAiApiKey);
   }
 
   Future<void> clearAll() async {

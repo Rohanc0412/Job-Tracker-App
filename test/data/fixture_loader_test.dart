@@ -32,7 +32,7 @@ void main() {
     await database.close();
   }, skip: _sqliteSkipReason);
 
-  test('evidence snippets are truncated and raw bodies stored', () async {
+  test('raw bodies are stored with hashes and byte lengths', () async {
     final database = AppDatabase(database: sqlite3.openInMemory());
     final bundle = FixtureTestBundle();
     final loader = FixtureLoader(database, bundle: bundle);
@@ -41,13 +41,11 @@ void main() {
     final raw = await bundle.loadString('assets/eml_fixtures/$fileName');
     final body = _extractBody(raw);
     final rows = database.rawDb.select(
-      'SELECT evidenceSnippet, raw_body_text, raw_body_sha256, raw_body_byte_len '
+      'SELECT raw_body_text, raw_body_sha256, raw_body_byte_len '
       'FROM email_events WHERE id = ?;',
       ['fx_$fileName'],
     );
     expect(rows, isNotEmpty);
-    final snippet = rows.first['evidenceSnippet'] as String;
-    expect(snippet.length <= FixtureLoader.evidenceMaxLength, isTrue);
     final rawBodyText = rows.first['raw_body_text'] as String;
     expect(rawBodyText, body);
     final byteLen = rows.first['raw_body_byte_len'] as int;

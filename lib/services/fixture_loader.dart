@@ -8,6 +8,8 @@ import 'package:sqlite3/sqlite3.dart';
 
 import '../data/db/db.dart';
 import '../domain/status/status_types.dart';
+import 'email_text_extractor.dart';
+import 'mime_decoder.dart';
 
 class FixtureApplication {
   final String id;
@@ -60,7 +62,6 @@ class FixtureLoader {
   }) : _bundle = bundle ?? rootBundle;
 
   static const String fixturePrefix = 'assets/eml_fixtures/';
-  static const int evidenceMaxLength = 160;
 
   final AppDatabase _database;
   final AssetBundle _bundle;
@@ -101,6 +102,7 @@ class FixtureLoader {
         fileName: name,
         applicationId: meta.applicationId,
         parsed: parsed,
+        cleanedBody: EmailTextExtractor.extractCleanText(parsed.body),
       ));
     }
 
@@ -176,10 +178,10 @@ class FixtureLoader {
     final stmt = db.prepare(
       'INSERT OR REPLACE INTO email_events (id, applicationId, accountLabel, '
       'provider, folder, cursorValue, messageId, subject, fromAddr, date, '
-      'extractedStatus, extractedFieldsJson, evidenceSnippet, raw_body_text, '
+      'extractedStatus, extractedFieldsJson, raw_body_text, '
       'raw_body_path, raw_body_sha256, raw_body_byte_len, hash, '
       'isSignificantUpdate) '
-      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
     );
     var inserted = 0;
     for (final email in emails) {
@@ -190,9 +192,8 @@ class FixtureLoader {
       final fieldsJson = email.parsed.icsPayload == null
           ? null
           : jsonEncode({'ics': email.parsed.icsPayload});
-      final body = email.parsed.body;
-      final snippet = _truncate(body, evidenceMaxLength);
-      final bodyBytes = utf8.encode(body);
+      final rawBody = email.parsed.body;
+      final bodyBytes = utf8.encode(rawBody);
       final bodySha = sha256.convert(bodyBytes).toString();
       final status = email.extractedStatus;
       stmt.execute([
@@ -208,8 +209,7 @@ class FixtureLoader {
         email.parsed.date.toIso8601String(),
         status,
         fieldsJson,
-        snippet,
-        body,
+        rawBody,
         null,
         bodySha,
         bodyBytes.length,
@@ -234,55 +234,24 @@ class FixtureLoader {
       headerLines.add(lines[index]);
     }
 
-    final headers = _parseHeaders(headerLines);
+    final headers = MimeDecoder.parseHeaders(headerLines);
     final rawBody = lines.sublist(index).join('\n');
-    final contentType = headers['content-type'];
-    final boundary = _parseBoundary(contentType);
-
-    String body = rawBody.trim();
-    String? icsPayload;
-    if (boundary != null) {
-      body = '';
-      final parts = rawBody.split('--$boundary');
-      for (final part in parts) {
-        final trimmed = part.trim();
-        if (trimmed.isEmpty || trimmed == '--') {
-          continue;
-        }
-        final partLines = trimmed.split(RegExp(r'\r?\n'));
-        final partHeaderLines = <String>[];
-        var partIndex = 0;
-        for (; partIndex < partLines.length; partIndex++) {
-          if (partLines[partIndex].trim().isEmpty) {
-            partIndex++;
-            break;
-          }
-          partHeaderLines.add(partLines[partIndex]);
-        }
-        final partHeaders = _parseHeaders(partHeaderLines);
-        final partBody = partLines.sublist(partIndex).join('\n').trim();
-        final partType = partHeaders['content-type'] ?? '';
-        if (partType.startsWith('text/plain') && body.isEmpty) {
-          body = partBody;
-        }
-        if (partType.startsWith('text/calendar')) {
-          icsPayload = partBody;
-        }
-      }
-    }
-
-    icsPayload ??= _extractIcs(rawBody);
+    final decodedBody = MimeDecoder.decodeBody(
+      headers: headers,
+      bodyBytes: latin1.encode(rawBody),
+    );
 
     final dateValue = headers['date'];
     final date = _parseDate(dateValue);
     return ParsedEmail(
       from: headers['from'] ?? 'unknown',
       to: headers['to'] ?? 'unknown',
-      subject: headers['subject'] ?? 'No subject',
+      subject: EmailTextExtractor.decodeMimeHeader(
+          headers['subject'] ?? 'No subject'),
       messageId: headers['message-id'] ?? 'fixture-${date.toIso8601String()}',
       date: date,
-      body: body.isEmpty ? rawBody.trim() : body,
-      icsPayload: icsPayload,
+      body: decodedBody.body.isEmpty ? rawBody.trim() : decodedBody.body,
+      icsPayload: decodedBody.icsPayload ?? _extractIcs(rawBody),
     );
   }
 
@@ -299,43 +268,6 @@ class FixtureLoader {
         return DateTime.now().toUtc();
       }
     }
-  }
-
-  Map<String, String> _parseHeaders(List<String> lines) {
-    final headers = <String, String>{};
-    String? currentKey;
-    for (final line in lines) {
-      if (line.startsWith(' ') || line.startsWith('\t')) {
-        if (currentKey != null) {
-          headers[currentKey] =
-              '${headers[currentKey]} ${line.trim()}';
-        }
-        continue;
-      }
-      final index = line.indexOf(':');
-      if (index <= 0) {
-        continue;
-      }
-      currentKey = line.substring(0, index).trim().toLowerCase();
-      headers[currentKey] = line.substring(index + 1).trim();
-    }
-    return headers;
-  }
-
-  String? _parseBoundary(String? contentType) {
-    if (contentType == null) {
-      return null;
-    }
-    final boundaryIndex = contentType.toLowerCase().indexOf('boundary=');
-    if (boundaryIndex == -1) {
-      return null;
-    }
-    final value = contentType.substring(boundaryIndex + 9).trim();
-    final raw = value.split(';').first.trim();
-    if (raw.startsWith('"') && raw.endsWith('"')) {
-      return raw.substring(1, raw.length - 1);
-    }
-    return raw;
   }
 
   String? _extractIcs(String rawBody) {
@@ -365,30 +297,24 @@ class FixtureLoader {
     }
   }
 
-  String _truncate(String value, int maxLength) {
-    final trimmed = value.trim();
-    if (trimmed.length <= maxLength) {
-      return trimmed;
-    }
-    return '${trimmed.substring(0, maxLength - 3).trimRight()}...';
-  }
-
 }
 
 class _FixtureEmail {
   final String fileName;
   final String applicationId;
   final ParsedEmail parsed;
+  final String cleanedBody;
 
   const _FixtureEmail({
     required this.fileName,
     required this.applicationId,
     required this.parsed,
+    required this.cleanedBody,
   });
 
   String? get extractedStatus {
     final subject = parsed.subject.toLowerCase();
-    final body = parsed.body.toLowerCase();
+    final body = cleanedBody.toLowerCase();
     if (subject.contains('offer') || body.contains('offer')) {
       return 'offer';
     }

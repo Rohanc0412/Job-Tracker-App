@@ -1,6 +1,7 @@
 import 'package:sqlite3/sqlite3.dart';
 
 import '../../domain/status/status_types.dart';
+import '../../services/email_text_extractor.dart';
 import '../db/db.dart';
 import '../models/activity_item.dart';
 import '../models/application.dart';
@@ -35,7 +36,7 @@ class SqliteApplicationRepo implements ApplicationRepo {
   Future<List<ActivityItem>> listRecentUpdates({int limit = 12}) async {
     final db = await _db();
     final rows = db.select(
-      'SELECT e.subject, e.evidenceSnippet, e.date, e.extractedStatus, '
+      'SELECT e.subject, e.llm_summary, e.date, e.extractedStatus, '
       'a.company, e.applicationId, e.raw_body_text, e.raw_body_path '
       'FROM email_events e '
       'LEFT JOIN applications a ON a.id = e.applicationId '
@@ -68,15 +69,16 @@ class SqliteApplicationRepo implements ApplicationRepo {
     final db = await _db();
     print('[Repo] listTimeline for applicationId: $applicationId');
     final emailRows = db.select(
-      'SELECT id, subject, evidenceSnippet, date, extractedStatus, raw_body_text, raw_body_path '
+      'SELECT id, subject, date, extractedStatus, raw_body_text, raw_body_path, raw_body_byte_len '
       'FROM email_events WHERE applicationId = ?;',
       [applicationId],
     );
     print('[Repo] Found ${emailRows.length} emails for this application');
     for (final row in emailRows) {
       final emailId = row['id'] as String;
-      final subject = row['subject'] as String;
-      final bodyLen = (row['raw_body_text'] as String?)?.length ?? 0;
+      final subject =
+          EmailTextExtractor.decodeMimeHeader(row['subject'] as String);
+      final bodyLen = (row['raw_body_byte_len'] as num?)?.toInt() ?? 0;
       print('[Repo]   - Email $emailId: "$subject" (body: $bodyLen bytes)');
     }
 
@@ -162,9 +164,11 @@ class SqliteApplicationRepo implements ApplicationRepo {
   ActivityItem _mapEmailActivity(Row row) {
     final status = row['extractedStatus'] as String?;
     final company = row['company'] as String?;
-    final title = _activityTitle(company, status, row['subject'] as String);
-    final detail =
-        (row['evidenceSnippet'] as String?) ?? (row['subject'] as String);
+    final subject =
+        EmailTextExtractor.decodeMimeHeader(row['subject'] as String);
+    final title = _activityTitle(company, status, subject);
+    final summary = row['llm_summary'] as String?;
+    final detail = summary == null || summary.trim().isEmpty ? subject : summary;
     return ActivityItem(
       title: title,
       detail: detail,
@@ -191,10 +195,11 @@ class SqliteApplicationRepo implements ApplicationRepo {
 
   ActivityItem _mapEmailTimeline(Row row) {
     final status = row['extractedStatus'] as String?;
-    final subject = row['subject'] as String;
+    final subject =
+        EmailTextExtractor.decodeMimeHeader(row['subject'] as String);
     return ActivityItem(
       title: subject,
-      detail: (row['evidenceSnippet'] as String?) ?? subject,
+      detail: subject,
       timestamp: DateTime.parse(row['date'] as String),
       kind: _kindFromStatus(status),
       rawBodyText: row['raw_body_text'] as String?,

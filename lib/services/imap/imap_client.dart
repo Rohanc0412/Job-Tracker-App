@@ -66,8 +66,10 @@ class ImapClient {
   final int _maxLiteralBytes;
   ImapLineReader? _reader;
   int _tagCounter = 0;
+  String? _connectedHost;
 
   Future<void> connect(String host, int port) async {
+    _connectedHost = host;
     if (_transport == null) {
       print('[ImapClient] Establishing SSL connection to $host:$port...');
       final socket = await SecureSocket.connect(host, port);
@@ -126,13 +128,29 @@ class ImapClient {
 
   Future<List<int>> uidSearchJobApplications(DateTime? since) async {
     final tag = _nextTag();
-    _sendTagged(tag, _requestBuilder.uidSearchJobApplications(since));
+    _sendTagged(
+      tag,
+      _requestBuilder.uidSearchJobApplications(
+        since,
+        gmailRaw: _isGmailHost,
+      ),
+    );
     return _readSearchResults(tag);
   }
 
-  Future<List<int>> uidSearchJobApplicationsFrom(int uid) async {
+  Future<List<int>> uidSearchJobApplicationsFrom(
+    int uid, {
+    DateTime? since,
+  }) async {
     final tag = _nextTag();
-    _sendTagged(tag, _requestBuilder.uidSearchJobApplicationsFrom(uid));
+    _sendTagged(
+      tag,
+      _requestBuilder.uidSearchJobApplicationsFrom(
+        uid,
+        since: since,
+        gmailRaw: _isGmailHost,
+      ),
+    );
     return _readSearchResults(tag);
   }
 
@@ -166,9 +184,32 @@ class ImapClient {
   }
 
   Future<ImapFetchedMessage> fetchMessage(int uid) async {
+    return _fetchMessage(
+      uid,
+      _requestBuilder.uidFetchHeadersAndBody(uid, _maxLiteralBytes),
+    );
+  }
+
+  Future<ImapFetchedMessage> fetchMessagePreview(
+    int uid, {
+    required int maxBodyBytes,
+  }) async {
+    return _fetchMessage(
+      uid,
+      _requestBuilder.uidFetchHeadersAndBody(uid, maxBodyBytes),
+    );
+  }
+
+  Future<ImapFetchedMessage> fetchMessageFull(int uid) async {
+    return _fetchMessage(
+      uid,
+      _requestBuilder.uidFetchHeadersAndBodyFull(uid),
+    );
+  }
+
+  Future<ImapFetchedMessage> _fetchMessage(int uid, String command) async {
     final tag = _nextTag();
-    _sendTagged(
-        tag, _requestBuilder.uidFetchHeadersAndBody(uid, _maxLiteralBytes));
+    _sendTagged(tag, command);
     String headerText = '';
     Uint8List bodyBytes = Uint8List(0);
     var bodyByteLen = 0;
@@ -279,6 +320,14 @@ class ImapClient {
     if (!line.contains('OK')) {
       throw StateError('IMAP command failed: $line');
     }
+  }
+
+  bool get _isGmailHost {
+    final host = _connectedHost;
+    if (host == null) {
+      return false;
+    }
+    return host.toLowerCase() == 'imap.gmail.com';
   }
 }
 

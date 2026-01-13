@@ -7,6 +7,7 @@ class AppDataPaths {
   static const String dbFileName = 'job_tracker.db';
   static const String settingsFileName = 'settings.json';
   static const String rawBodiesDirName = 'raw_bodies';
+  static const String logFileName = 'job_tracker.log';
 
   static Future<Directory> ensureSupportDir() async {
     final dir = await getApplicationSupportDirectory();
@@ -32,6 +33,13 @@ class AppDataPaths {
     final file = File(p.join(dir.path, settingsFileName));
     await _ensureSecureFile(file.path);
     return file;
+  }
+
+  static Future<String> logFilePath() async {
+    final dir = await ensureSupportDir();
+    final path = p.join(dir.path, logFileName);
+    await _ensureSecureFile(path);
+    return path;
   }
 
   static Future<Directory> rawBodiesDir({bool ensure = true}) async {

@@ -77,8 +77,8 @@ void main() {
     expect(
       () => raw.execute(
         'INSERT INTO email_events (id, applicationId, accountLabel, provider, folder, cursorValue, '
-        'messageId, subject, fromAddr, date, extractedStatus, extractedFieldsJson, evidenceSnippet, '
-        'hash, isSignificantUpdate) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
+        'messageId, subject, fromAddr, date, extractedStatus, extractedFieldsJson, '
+        'hash, isSignificantUpdate) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
         [
           'dup_001',
           existing.applicationId,
@@ -92,7 +92,6 @@ void main() {
           existing.date.toIso8601String(),
           existing.extractedStatus,
           existing.extractedFieldsJson,
-          existing.evidenceSnippet,
           'hash_dup',
           existing.isSignificantUpdate ? 1 : 0,
         ],

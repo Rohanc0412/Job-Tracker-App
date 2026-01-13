@@ -43,7 +43,10 @@ class AppDatabase {
     }
     final db = _database!;
     db.execute('PRAGMA foreign_keys = ON;');
+    db.execute('PRAGMA journal_mode = WAL;');
+    db.execute('PRAGMA busy_timeout = 5000;');
     _createSchema(db);
+    _migrateEmailEventsSchema(db);
     _ensureEmailEventColumns(db);
     _seedIfEmpty(db);
     _initialized = true;
@@ -77,6 +80,38 @@ class AppDatabase {
     }
   }
 
+  void _migrateEmailEventsSchema(Database db) {
+    final columns = db.select("PRAGMA table_info('email_events');");
+    if (columns.isEmpty) {
+      return;
+    }
+    final existing = <String>{};
+    for (final row in columns) {
+      final name = row['name'] as String?;
+      if (name != null) {
+        existing.add(name);
+      }
+    }
+    if (!existing.contains('evidenceSnippet')) {
+      return;
+    }
+
+    db.execute('ALTER TABLE email_events RENAME TO email_events_old;');
+    db.execute(_emailEventsTable);
+
+    final columnsToCopy =
+        _emailEventsColumns.where(existing.contains).toList();
+    if (columnsToCopy.isNotEmpty) {
+      final columnList = columnsToCopy.join(', ');
+      db.execute(
+        'INSERT INTO email_events ($columnList) '
+        'SELECT $columnList FROM email_events_old;',
+      );
+    }
+    db.execute('DROP TABLE email_events_old;');
+    _ensureEmailEventIndexes(db);
+  }
+
   void _ensureEmailEventColumns(Database db) {
     final columns = db.select("PRAGMA table_info('email_events');");
     final existing = <String>{};
@@ -91,6 +126,23 @@ class AppDatabase {
       'raw_body_path': 'TEXT',
       'raw_body_sha256': 'TEXT',
       'raw_body_byte_len': 'INTEGER',
+      'llm_category': 'TEXT',
+      'llm_confidence': 'REAL',
+      'llm_summary': 'TEXT',
+      'llm_status': 'TEXT',
+      'llm_company': 'TEXT',
+      'llm_role': 'TEXT',
+      'llm_job_id': 'TEXT',
+      'llm_portal_url': 'TEXT',
+      'llm_interview_start': 'TEXT',
+      'llm_interview_end': 'TEXT',
+      'llm_interview_tz': 'TEXT',
+      'llm_interview_location': 'TEXT',
+      'llm_meeting_url': 'TEXT',
+      'llm_original_from_email': 'TEXT',
+      'llm_original_to_emails_json': 'TEXT',
+      'llm_evidence_json': 'TEXT',
+      'llm_action_items_json': 'TEXT',
     };
     for (final entry in additions.entries) {
       if (!existing.contains(entry.key)) {
@@ -98,6 +150,12 @@ class AppDatabase {
           'ALTER TABLE email_events ADD COLUMN ${entry.key} ${entry.value};',
         );
       }
+    }
+  }
+
+  void _ensureEmailEventIndexes(Database db) {
+    for (final statement in _emailEventIndexStatements) {
+      db.execute(statement);
     }
   }
 
@@ -164,8 +222,8 @@ class AppDatabase {
 
       final emailStmt = db.prepare(
         'INSERT INTO email_events (id, applicationId, accountLabel, provider, folder, cursorValue, '
-        'messageId, subject, fromAddr, date, extractedStatus, extractedFieldsJson, evidenceSnippet, '
-        'raw_body_text, raw_body_path, hash, isSignificantUpdate) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
+        'messageId, subject, fromAddr, date, extractedStatus, extractedFieldsJson, '
+        'raw_body_text, raw_body_path, hash, isSignificantUpdate) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
       );
       for (final event in SeedData.emailEvents) {
         emailStmt.execute([
@@ -181,7 +239,6 @@ class AppDatabase {
           event.date.toIso8601String(),
           event.extractedStatus,
           event.extractedFieldsJson,
-          event.evidenceSnippet,
           event.rawBodyText,
           event.rawBodyPath,
           event.hash,
@@ -265,31 +322,8 @@ const List<String> _schemaStatements = [
     nextStepAt TEXT
   );
   ''',
-  '''
-  CREATE TABLE IF NOT EXISTS email_events (
-    id TEXT PRIMARY KEY,
-    applicationId TEXT NOT NULL,
-    accountLabel TEXT NOT NULL,
-    provider TEXT NOT NULL,
-    folder TEXT NOT NULL,
-    cursorValue TEXT,
-    messageId TEXT NOT NULL,
-    subject TEXT NOT NULL,
-    fromAddr TEXT NOT NULL,
-    date TEXT NOT NULL,
-    extractedStatus TEXT,
-    extractedFieldsJson TEXT,
-    evidenceSnippet TEXT,
-    raw_body_text TEXT,
-    raw_body_path TEXT,
-    raw_body_sha256 TEXT,
-    raw_body_byte_len INTEGER,
-    hash TEXT NOT NULL,
-    isSignificantUpdate INTEGER NOT NULL,
-    FOREIGN KEY(applicationId) REFERENCES applications(id) ON DELETE CASCADE,
-    UNIQUE(accountLabel, provider, messageId)
-  );
-  ''',
+  _emailEventsTable,
+  _emailReviewQueueTable,
   '''
   CREATE TABLE IF NOT EXISTS interview_events (
     id TEXT PRIMARY KEY,
@@ -318,9 +352,131 @@ const List<String> _schemaStatements = [
     lastSyncTime TEXT NOT NULL
   );
   ''',
+  ..._emailEventIndexStatements,
+  ..._emailReviewIndexStatements,
   'CREATE INDEX IF NOT EXISTS idx_applications_status ON applications(currentStatus);',
   'CREATE INDEX IF NOT EXISTS idx_applications_lastSeen ON applications(lastSeen);',
+  'CREATE INDEX IF NOT EXISTS idx_interview_events_startTime ON interview_events(startTime);',
+];
+
+const String _emailEventsTable = '''
+  CREATE TABLE IF NOT EXISTS email_events (
+    id TEXT PRIMARY KEY,
+    applicationId TEXT NOT NULL,
+    accountLabel TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    folder TEXT NOT NULL,
+    cursorValue TEXT,
+    messageId TEXT NOT NULL,
+    subject TEXT NOT NULL,
+    fromAddr TEXT NOT NULL,
+    date TEXT NOT NULL,
+    extractedStatus TEXT,
+    extractedFieldsJson TEXT,
+    raw_body_text TEXT,
+    raw_body_path TEXT,
+    raw_body_sha256 TEXT,
+    raw_body_byte_len INTEGER,
+    llm_category TEXT,
+    llm_confidence REAL,
+    llm_summary TEXT,
+    llm_status TEXT,
+    llm_company TEXT,
+    llm_role TEXT,
+    llm_job_id TEXT,
+    llm_portal_url TEXT,
+    llm_interview_start TEXT,
+    llm_interview_end TEXT,
+    llm_interview_tz TEXT,
+    llm_interview_location TEXT,
+    llm_meeting_url TEXT,
+    llm_original_from_email TEXT,
+    llm_original_to_emails_json TEXT,
+    llm_evidence_json TEXT,
+    llm_action_items_json TEXT,
+    hash TEXT NOT NULL,
+    isSignificantUpdate INTEGER NOT NULL,
+    FOREIGN KEY(applicationId) REFERENCES applications(id) ON DELETE CASCADE,
+    UNIQUE(accountLabel, provider, messageId)
+  );
+  ''';
+
+const String _emailReviewQueueTable = '''
+  CREATE TABLE IF NOT EXISTS email_review_queue (
+    id TEXT PRIMARY KEY,
+    accountLabel TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    folder TEXT NOT NULL,
+    cursorValue TEXT,
+    messageId TEXT NOT NULL,
+    subject TEXT NOT NULL,
+    fromAddr TEXT NOT NULL,
+    toAddr TEXT NOT NULL,
+    date TEXT NOT NULL,
+    snippet TEXT,
+    clean_body_text TEXT,
+    clean_body_preview TEXT,
+    raw_body_text TEXT,
+    raw_body_path TEXT,
+    raw_body_sha256 TEXT,
+    raw_body_byte_len INTEGER,
+    llm_json TEXT,
+    llm_state TEXT NOT NULL,
+    llm_error TEXT,
+    user_overrides_json TEXT,
+    suggested_application_id TEXT,
+    selected_application_id TEXT,
+    review_state TEXT NOT NULL,
+    createdAt TEXT NOT NULL,
+    updatedAt TEXT NOT NULL,
+    UNIQUE(accountLabel, provider, messageId)
+  );
+  ''';
+
+const List<String> _emailEventsColumns = [
+  'id',
+  'applicationId',
+  'accountLabel',
+  'provider',
+  'folder',
+  'cursorValue',
+  'messageId',
+  'subject',
+  'fromAddr',
+  'date',
+  'extractedStatus',
+  'extractedFieldsJson',
+  'raw_body_text',
+  'raw_body_path',
+  'raw_body_sha256',
+  'raw_body_byte_len',
+  'llm_category',
+  'llm_confidence',
+  'llm_summary',
+  'llm_status',
+  'llm_company',
+  'llm_role',
+  'llm_job_id',
+  'llm_portal_url',
+  'llm_interview_start',
+  'llm_interview_end',
+  'llm_interview_tz',
+  'llm_interview_location',
+  'llm_meeting_url',
+  'llm_original_from_email',
+  'llm_original_to_emails_json',
+  'llm_evidence_json',
+  'llm_action_items_json',
+  'hash',
+  'isSignificantUpdate',
+];
+
+const List<String> _emailEventIndexStatements = [
   'CREATE INDEX IF NOT EXISTS idx_email_events_date ON email_events(date);',
   'CREATE INDEX IF NOT EXISTS idx_email_events_applicationId ON email_events(applicationId);',
-  'CREATE INDEX IF NOT EXISTS idx_interview_events_startTime ON interview_events(startTime);',
+];
+
+const List<String> _emailReviewIndexStatements = [
+  'CREATE INDEX IF NOT EXISTS idx_review_queue_state ON email_review_queue(review_state);',
+  'CREATE INDEX IF NOT EXISTS idx_review_queue_date ON email_review_queue(date);',
 ];

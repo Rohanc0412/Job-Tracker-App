@@ -69,7 +69,7 @@ void main() {
     db.execute(
       'INSERT INTO email_events (id, applicationId, accountLabel, provider, '
       'folder, cursorValue, messageId, subject, fromAddr, date, extractedStatus, '
-      'extractedFieldsJson, evidenceSnippet, hash, isSignificantUpdate) '
+      'extractedFieldsJson, raw_body_text, hash, isSignificantUpdate) '
       'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
       [
         'fx_email_dup_1',
@@ -92,7 +92,7 @@ void main() {
     db.execute(
       'INSERT INTO email_events (id, applicationId, accountLabel, provider, '
       'folder, cursorValue, messageId, subject, fromAddr, date, extractedStatus, '
-      'extractedFieldsJson, evidenceSnippet, hash, isSignificantUpdate) '
+      'extractedFieldsJson, raw_body_text, hash, isSignificantUpdate) '
       'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
       [
         'fx_email_dup_2',
@@ -173,7 +173,7 @@ void main() {
     db.execute(
       'INSERT INTO email_events (id, applicationId, accountLabel, provider, '
       'folder, cursorValue, messageId, subject, fromAddr, date, extractedStatus, '
-      'extractedFieldsJson, evidenceSnippet, hash, isSignificantUpdate) '
+      'extractedFieldsJson, raw_body_text, hash, isSignificantUpdate) '
       'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
       [
         'fx_email_iv_1',
@@ -252,7 +252,7 @@ void main() {
     db.execute(
       'INSERT INTO email_events (id, applicationId, accountLabel, provider, '
       'folder, cursorValue, messageId, subject, fromAddr, date, extractedStatus, '
-      'extractedFieldsJson, evidenceSnippet, hash, isSignificantUpdate) '
+      'extractedFieldsJson, raw_body_text, hash, isSignificantUpdate) '
       'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
       [
         'fx_email_text_1',

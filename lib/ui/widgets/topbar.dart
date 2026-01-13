@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 class Topbar extends StatelessWidget {
   final String title;
@@ -7,6 +8,8 @@ class Topbar extends StatelessWidget {
   final VoidCallback? onSync;
   final bool syncInProgress;
   final String? syncLabel;
+  final int reviewCount;
+  final VoidCallback? onReview;
   final TextEditingController? searchController;
   final ValueChanged<String>? onSearchChanged;
 
@@ -18,6 +21,8 @@ class Topbar extends StatelessWidget {
     this.onSync,
     this.syncInProgress = false,
     this.syncLabel,
+    this.reviewCount = 0,
+    this.onReview,
     this.searchController,
     this.onSearchChanged,
   });
@@ -70,7 +75,7 @@ class Topbar extends StatelessWidget {
                 borderRadius: BorderRadius.circular(12),
               ),
               child: IconButton(
-                onPressed: () {},
+                onPressed: () => context.go('/settings'),
                 icon: const Icon(Icons.settings_outlined),
                 color: colorScheme.onSurface,
                 constraints: const BoxConstraints.tightFor(width: 40, height: 40),
@@ -88,6 +93,13 @@ class Topbar extends StatelessWidget {
                     )
                   : const Icon(Icons.sync),
               label: Text(syncLabel ?? 'Sync Gmail'),
+            ),
+          if (reviewCount > 0) const SizedBox(width: 12),
+          if (reviewCount > 0)
+            OutlinedButton.icon(
+              onPressed: onReview,
+              icon: const Icon(Icons.mark_email_read_outlined),
+              label: Text('Review ($reviewCount)'),
             ),
         ],
       ),

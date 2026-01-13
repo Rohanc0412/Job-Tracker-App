@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 
 import '../../data/db/db.dart';
@@ -10,9 +12,11 @@ import '../../services/fixture_loader.dart';
 import '../../services/fixture_ingestion_pipeline.dart';
 import '../../services/gmail_imap_test_service.dart';
 import '../../services/gmail_settings.dart';
+import '../../services/ollama_endpoints.dart';
 import '../../services/secrets_store.dart';
 import '../../services/settings_store.dart';
 import '../../services/app_data_paths.dart';
+import '../../services/local_llm_settings.dart';
 import '../widgets/sidebar.dart';
 import '../widgets/topbar.dart';
 
@@ -28,9 +32,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _clearBeforeLoad = true;
   bool _loading = false;
   bool _savingGmail = false;
+  bool _savingLlm = false;
+  bool _checkingModel = false;
   bool _storeRawBody = true;
   bool _seedDemoData = true;
   bool _wiping = false;
+  bool _openingLogs = false;
+  bool _resettingGmailIndex = false;
   bool _testingImap = false;
   DateTime? _gmailStartDate;
   DateTime? _lastSyncTime;
@@ -39,6 +47,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
       TextEditingController();
   final TextEditingController _gmailPasswordController =
       TextEditingController();
+  final TextEditingController _llmBaseUrlController =
+      TextEditingController();
+  final TextEditingController _llmTimeoutController =
+      TextEditingController();
+  final TextEditingController _llmMaxInputCharsController =
+      TextEditingController();
+  final TextEditingController _openAiApiKeyController =
+      TextEditingController();
+  String _selectedModelId = LocalLlmDefaults.modelId;
 
   late final VoidCallback _refreshListener;
 
@@ -58,7 +75,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
         startDateValue == null ? null : DateTime.tryParse(startDateValue);
     _gmailEmailController.text =
         settings.get<String>(GmailSettingsKeys.email) ?? '';
+    _llmBaseUrlController.text =
+        settings.get<String>(LocalLlmSettingsKeys.baseUrl) ??
+            LocalLlmDefaults.baseUrl;
+    _selectedModelId =
+        settings.get<String>(LocalLlmSettingsKeys.modelId) ??
+            LocalLlmDefaults.modelId;
+    if (_selectedModelId == kOpenAiModelId &&
+        _llmBaseUrlController.text.trim() == LocalLlmDefaults.baseUrl) {
+      _llmBaseUrlController.text = LocalLlmDefaults.openAiBaseUrl;
+    }
+    _llmTimeoutController.text = (settings
+            .get<int>(LocalLlmSettingsKeys.requestTimeoutMs) ??
+        LocalLlmDefaults.requestTimeoutMs)
+        .toString();
+    _llmMaxInputCharsController.text = (settings
+            .get<int>(LocalLlmSettingsKeys.maxInputChars) ??
+        LocalLlmDefaults.maxInputChars)
+        .toString();
     _loadGmailCredentials();
+    _loadOpenAiApiKey();
     _loadLastSyncTime();
     _refreshListener = _loadLastSyncTime;
     DataRefreshBus.notifier.addListener(_refreshListener);
@@ -69,6 +105,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     DataRefreshBus.notifier.removeListener(_refreshListener);
     _gmailEmailController.dispose();
     _gmailPasswordController.dispose();
+    _llmBaseUrlController.dispose();
+    _llmTimeoutController.dispose();
+    _llmMaxInputCharsController.dispose();
+    _openAiApiKeyController.dispose();
     super.dispose();
   }
 
@@ -81,6 +121,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _gmailEmailController.text = creds.email;
     }
     _gmailPasswordController.text = creds.appPassword;
+  }
+
+  Future<void> _loadOpenAiApiKey() async {
+    final apiKey = await SecretsStore().readOpenAiApiKey();
+    if (apiKey == null || !mounted) {
+      return;
+    }
+    if (_openAiApiKeyController.text.isEmpty) {
+      _openAiApiKeyController.text = apiKey;
+    }
   }
 
   Future<void> _loadLastSyncTime() async {
@@ -139,6 +189,201 @@ class _SettingsScreenState extends State<SettingsScreen> {
     } finally {
       if (mounted) {
         setState(() => _savingGmail = false);
+      }
+    }
+  }
+
+  Future<void> _saveLlmSettings() async {
+    setState(() => _savingLlm = true);
+    try {
+      final baseUrl = _llmBaseUrlController.text.trim();
+      final modelId = _selectedModelId;
+      final isOpenAi = modelId == kOpenAiModelId;
+      final timeoutMs =
+          int.tryParse(_llmTimeoutController.text.trim());
+      final maxInputChars =
+          int.tryParse(_llmMaxInputCharsController.text.trim());
+
+      if ((!isOpenAi && baseUrl.isEmpty) || modelId.isEmpty) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Base URL and model ID are required.')),
+        );
+        return;
+      }
+      if (!isOpenAi) {
+        try {
+          OllamaEndpoints.validateBaseUrl(baseUrl);
+        } catch (error) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Invalid base URL: $error')),
+          );
+          return;
+        }
+      }
+      if (timeoutMs == null || maxInputChars == null) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Enter valid numeric values.')),
+        );
+        return;
+      }
+      if (isOpenAi) {
+        final apiKey = _openAiApiKeyController.text.trim();
+        if (apiKey.isEmpty) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('OpenAI API key is required.')),
+          );
+          return;
+        }
+        await SecretsStore().saveOpenAiApiKey(apiKey);
+      }
+
+      final resolvedBaseUrl = isOpenAi
+          ? (baseUrl.isEmpty || baseUrl == LocalLlmDefaults.baseUrl
+              ? LocalLlmDefaults.openAiBaseUrl
+              : baseUrl)
+          : baseUrl;
+
+      await SettingsStore.instance.set(
+        LocalLlmSettingsKeys.baseUrl,
+        resolvedBaseUrl,
+      );
+      await SettingsStore.instance.set(
+        LocalLlmSettingsKeys.modelId,
+        modelId,
+      );
+      await SettingsStore.instance.set(
+        LocalLlmSettingsKeys.requestTimeoutMs,
+        timeoutMs,
+      );
+      await SettingsStore.instance.set(
+        LocalLlmSettingsKeys.maxInputChars,
+        maxInputChars,
+      );
+
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('LLM settings saved.')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _savingLlm = false);
+      }
+    }
+  }
+
+  Future<void> _resetGmailSyncIndex() async {
+    final email = _gmailEmailController.text.trim();
+    if (email.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter a Gmail address first.')),
+      );
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Reset Gmail sync index'),
+        content: const Text(
+          'This clears Gmail sync state for this account so the next sync starts '
+          'from the configured start date.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Reset'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) {
+      return;
+    }
+
+    setState(() => _resettingGmailIndex = true);
+    try {
+      final db = AppDatabase.instance;
+      await db.open();
+      db.rawDb.execute(
+        'DELETE FROM sync_state WHERE provider = ? AND accountLabel = ?;',
+        ['gmail', email],
+      );
+      await _loadLastSyncTime();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Gmail sync index reset.')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _resettingGmailIndex = false);
+      }
+    }
+  }
+
+  Future<void> _checkModelInstalled() async {
+    if (_selectedModelId == kOpenAiModelId) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('OpenAI models are accessed via API; no local check.'),
+        ),
+      );
+      return;
+    }
+    setState(() => _checkingModel = true);
+    try {
+      final baseUrl = _llmBaseUrlController.text.trim();
+      OllamaEndpoints.validateBaseUrl(baseUrl);
+      final response = await http
+          .get(OllamaEndpoints.tags(baseUrl))
+          .timeout(const Duration(seconds: 10));
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw StateError('Ollama /api/tags failed: ${response.body}');
+      }
+      final decoded = jsonDecode(response.body);
+      final models = decoded['models'];
+      if (models is! List) {
+        throw StateError('Ollama /api/tags response is invalid.');
+      }
+      final selected = _selectedModelId;
+      final exists = models.any((entry) =>
+          entry is Map<String, dynamic> && entry['name'] == selected);
+      if (!mounted) {
+        return;
+      }
+      if (exists) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Model "$selected" is installed.')),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content:
+                Text('Model "$selected" missing. Run: ollama pull $selected'),
+          ),
+        );
+      }
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Model check failed: $error')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _checkingModel = false);
       }
     }
   }
@@ -250,6 +495,40 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  Future<void> _openLogFolder() async {
+    setState(() => _openingLogs = true);
+    try {
+      final logPath = await AppDataPaths.logFilePath();
+      final directory = File(logPath).parent;
+      if (Platform.isWindows) {
+        await Process.start('explorer', [directory.path], runInShell: true);
+      } else if (Platform.isMacOS) {
+        await Process.start('open', [directory.path]);
+      } else if (Platform.isLinux) {
+        await Process.start('xdg-open', [directory.path]);
+      } else {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Log folder: ${directory.path}')),
+        );
+        return;
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Opened log folder: ${directory.path}')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to open log folder: $error')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _openingLogs = false);
+      }
+    }
+  }
+
   Future<bool> _deleteFileWithRetry(File file) async {
     const attempts = 10;
     for (var i = 0; i < attempts; i++) {
@@ -303,7 +582,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final loader = FixtureLoader(AppDatabase.instance);
       final count =
           await loader.loadFixtures(clearExisting: _clearBeforeLoad);
-      final pipeline = FixtureIngestionPipeline(AppDatabase.instance);
+      final pipeline = FixtureIngestionPipeline(
+        AppDatabase.instance,
+        applyRulesBasedRoleSourceExtraction: false,
+      );
       await pipeline.run();
       DataRefreshBus.notify();
       if (!mounted) {
@@ -406,6 +688,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isOpenAiModel = _selectedModelId == kOpenAiModelId;
     return Scaffold(
       body: SafeArea(
         child: Row(
@@ -582,6 +865,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                         label: const Text('Test IMAP'),
                                       ),
                                       const SizedBox(width: 8),
+                                      OutlinedButton.icon(
+                                        onPressed: _resettingGmailIndex
+                                            ? null
+                                            : _resetGmailSyncIndex,
+                                        icon: _resettingGmailIndex
+                                            ? const SizedBox(
+                                                width: 16,
+                                                height: 16,
+                                                child:
+                                                    CircularProgressIndicator(
+                                                  strokeWidth: 2,
+                                                ),
+                                              )
+                                            : const Icon(Icons.restart_alt),
+                                        label: const Text('Reset index'),
+                                      ),
+                                      const SizedBox(width: 8),
                                       FilledButton(
                                         onPressed:
                                             _savingGmail ? null : _saveGmailSettings,
@@ -722,6 +1022,150 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
+                                    'LLM',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleMedium,
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'Use Ollama or OpenAI for Gmail email filtering and extraction.',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodyMedium
+                                        ?.copyWith(
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onSurfaceVariant,
+                                        ),
+                                  ),
+                                  const SizedBox(height: 16),
+                                  TextField(
+                                    controller: _llmBaseUrlController,
+                                    enabled: !isOpenAiModel,
+                                    decoration: InputDecoration(
+                                      labelText: 'Base URL (Ollama)',
+                                      helperText: isOpenAiModel
+                                          ? 'OpenAI uses the API endpoint.'
+                                          : null,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  DropdownButtonFormField<String>(
+                                    value: _selectedModelId,
+                                    decoration: const InputDecoration(
+                                      labelText: 'Model',
+                                    ),
+                                    items: [
+                                      for (final model in LocalLlmModels)
+                                        DropdownMenuItem(
+                                          value: model,
+                                          child: Text(model),
+                                        ),
+                                    ],
+                                    onChanged: (value) {
+                                      if (value == null) {
+                                        return;
+                                      }
+                                      setState(() {
+                                        _selectedModelId = value;
+                                        if (value == kOpenAiModelId &&
+                                            (_llmBaseUrlController.text
+                                                    .trim()
+                                                    .isEmpty ||
+                                                _llmBaseUrlController.text
+                                                        .trim() ==
+                                                    LocalLlmDefaults.baseUrl)) {
+                                          _llmBaseUrlController.text =
+                                              LocalLlmDefaults.openAiBaseUrl;
+                                        }
+                                      });
+                                    },
+                                  ),
+                                  if (isOpenAiModel) ...[
+                                    const SizedBox(height: 12),
+                                    TextField(
+                                      controller: _openAiApiKeyController,
+                                      decoration: const InputDecoration(
+                                        labelText: 'OpenAI API key',
+                                      ),
+                                      obscureText: true,
+                                    ),
+                                  ],
+                                  const SizedBox(height: 12),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: TextField(
+                                          controller: _llmTimeoutController,
+                                          decoration: const InputDecoration(
+                                            labelText: 'Timeout (ms)',
+                                          ),
+                                          keyboardType: TextInputType.number,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: TextField(
+                                          controller:
+                                              _llmMaxInputCharsController,
+                                          decoration: const InputDecoration(
+                                            labelText: 'Max input chars',
+                                          ),
+                                          keyboardType: TextInputType.number,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Row(
+                                    children: [
+                                      OutlinedButton.icon(
+                                        onPressed: _checkingModel || isOpenAiModel
+                                            ? null
+                                            : _checkModelInstalled,
+                                        icon: _checkingModel
+                                            ? const SizedBox(
+                                                width: 16,
+                                                height: 16,
+                                                child:
+                                                    CircularProgressIndicator(
+                                                  strokeWidth: 2,
+                                                ),
+                                              )
+                                            : const Icon(Icons.search),
+                                        label: const Text('Check model installed'),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      FilledButton(
+                                        onPressed: _savingLlm
+                                            ? null
+                                            : _saveLlmSettings,
+                                        child: _savingLlm
+                                            ? const SizedBox(
+                                                width: 16,
+                                                height: 16,
+                                                child:
+                                                    CircularProgressIndicator(
+                                                  strokeWidth: 2,
+                                                ),
+                                              )
+                                            : const Text('Save'),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          Card(
+                            child: Padding(
+                              padding: const EdgeInsets.all(20),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
                                     'Security',
                                     style: Theme.of(context)
                                         .textTheme
@@ -756,6 +1200,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                             )
                                           : const Icon(Icons.delete_outline),
                                       label: const Text('Wipe Local Data'),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: OutlinedButton.icon(
+                                      onPressed: _openingLogs
+                                          ? null
+                                          : _openLogFolder,
+                                      icon: _openingLogs
+                                          ? const SizedBox(
+                                              width: 16,
+                                              height: 16,
+                                              child:
+                                                  CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                              ),
+                                            )
+                                          : const Icon(Icons.folder_open),
+                                      label:
+                                          const Text('Open Log Folder'),
                                     ),
                                   ),
                                 ],
