@@ -33,7 +33,7 @@ GoRouter _createRouter(ApplicationRepo? repo) => GoRouter(
     ),
     GoRoute(
       path: '/applications',
-      builder: (context, state) => const ApplicationsScreen(),
+      builder: (context, state) => ApplicationsScreen(repo: repo),
     ),
     GoRoute(
       path: '/settings',

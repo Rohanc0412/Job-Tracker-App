@@ -93,6 +93,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
     super.dispose();
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _refreshReviewQueue();
+  }
+
   Future<void> _loadDashboard() async {
     try {
       _errorMessage = null;
@@ -109,6 +115,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _upcoming = upcoming;
       });
       _applicationsNotifier.value = List<Application>.from(apps);
+      await _refreshReviewQueue();
       await _applySearch(forceTimeline: true);
     } catch (error) {
       if (!mounted) {
@@ -116,6 +123,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
       }
       setState(() => _errorMessage = error.toString());
     }
+  }
+
+  Future<void> _refreshReviewQueue() async {
+    final reviewQueue = await _reviewRepo.listPending();
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _reviewQueue
+        ..clear()
+        ..addAll(reviewQueue);
+    });
+    _updateReviewDialogState();
   }
 
   Future<void> _applySearch({bool forceTimeline = false}) async {

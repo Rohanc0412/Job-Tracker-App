@@ -25,6 +25,7 @@ class AppTable extends StatefulWidget {
   final List<Application> applications;
   final String? selectedId;
   final ValueChanged<Application> onSelected;
+  final ValueChanged<Application>? onOpenDetails;
   final double maxBodyHeight;
 
   const AppTable({
@@ -32,6 +33,7 @@ class AppTable extends StatefulWidget {
     required this.applications,
     required this.selectedId,
     required this.onSelected,
+    this.onOpenDetails,
     this.maxBodyHeight = 360,
   });
 
@@ -208,6 +210,12 @@ class _AppTableState extends State<AppTable> {
                                         return InkWell(
                                           onTap: () =>
                                               widget.onSelected(application),
+                                          onDoubleTap:
+                                              widget.onOpenDetails == null
+                                                  ? null
+                                                  : () => widget.onOpenDetails!(
+                                                        application,
+                                                      ),
                                           borderRadius:
                                               BorderRadius.circular(12),
                                           child: Container(

@@ -10,6 +10,8 @@ class Topbar extends StatelessWidget {
   final String? syncLabel;
   final int reviewCount;
   final VoidCallback? onReview;
+  final bool showSettings;
+  final bool showSync;
   final TextEditingController? searchController;
   final ValueChanged<String>? onSearchChanged;
 
@@ -23,6 +25,8 @@ class Topbar extends StatelessWidget {
     this.syncLabel,
     this.reviewCount = 0,
     this.onReview,
+    this.showSettings = true,
+    this.showSync = true,
     this.searchController,
     this.onSearchChanged,
   });
@@ -67,8 +71,8 @@ class Topbar extends StatelessWidget {
                 onChanged: onSearchChanged,
               ),
             ),
-          if (showSearch) const SizedBox(width: 12),
-          if (showSearch)
+          if (showSearch && showSettings) const SizedBox(width: 12),
+          if (showSearch && showSettings)
             Container(
               decoration: BoxDecoration(
                 color: colorScheme.surfaceVariant,
@@ -81,8 +85,8 @@ class Topbar extends StatelessWidget {
                 constraints: const BoxConstraints.tightFor(width: 40, height: 40),
               ),
             ),
-          if (showSearch) const SizedBox(width: 12),
-          if (showSearch)
+          if (showSearch && showSync) const SizedBox(width: 12),
+          if (showSearch && showSync)
             FilledButton.icon(
               onPressed: syncInProgress ? null : (onSync ?? () {}),
               icon: syncInProgress

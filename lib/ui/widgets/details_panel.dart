@@ -215,6 +215,12 @@ class DetailsPanel extends StatelessWidget {
                       children: [
                         for (var i = 0; i < timeline.length; i++) ...[
                           _TimelineItem(
+                            key: ValueKey(
+                              '${timeline[i].applicationId ?? ''}'
+                              '|${timeline[i].timestamp.toIso8601String()}'
+                              '|${timeline[i].kind.name}'
+                              '|${timeline[i].title}',
+                            ),
                             item: timeline[i],
                             timeFormat: timelineFormat,
                           ),
@@ -266,6 +272,7 @@ class _TimelineItem extends StatefulWidget {
   final DateFormat timeFormat;
 
   const _TimelineItem({
+    super.key,
     required this.item,
     required this.timeFormat,
   });
@@ -279,6 +286,27 @@ class _TimelineItemState extends State<_TimelineItem> {
   String? _fullBody;
   bool _isLoadingBody = false;
   final _bodyService = BodyRetrievalService();
+
+  bool _isSameItem(ActivityItem a, ActivityItem b) {
+    return a.title == b.title &&
+        a.detail == b.detail &&
+        a.timestamp == b.timestamp &&
+        a.kind == b.kind &&
+        a.applicationId == b.applicationId &&
+        a.timezone == b.timezone &&
+        a.rawBodyText == b.rawBodyText &&
+        a.rawBodyPath == b.rawBodyPath;
+  }
+
+  @override
+  void didUpdateWidget(covariant _TimelineItem oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!_isSameItem(oldWidget.item, widget.item)) {
+      _isExpanded = false;
+      _isLoadingBody = false;
+      _fullBody = null;
+    }
+  }
 
   Color _dotColor(ActivityKind kind, ColorScheme scheme) {
     switch (kind) {

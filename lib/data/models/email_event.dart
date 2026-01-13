@@ -11,11 +11,12 @@ class EmailEvent {
   final DateTime date;
   final String? extractedStatus;
   final String? extractedFieldsJson;
+  final String? llmSummary;
   final String? rawBodyText;
   final String? rawBodyPath;
   final String? rawBodySha256;
   final int? rawBodyByteLen;
-  final String hash;
+  final String? hash;
   final bool isSignificantUpdate;
 
   const EmailEvent({
@@ -24,18 +25,19 @@ class EmailEvent {
     required this.accountLabel,
     required this.provider,
     required this.folder,
-    this.cursorValue,
+    required this.cursorValue,
     required this.messageId,
     required this.subject,
     required this.fromAddr,
     required this.date,
     this.extractedStatus,
     this.extractedFieldsJson,
+    this.llmSummary,
     this.rawBodyText,
     this.rawBodyPath,
     this.rawBodySha256,
     this.rawBodyByteLen,
-    required this.hash,
-    required this.isSignificantUpdate,
+    this.hash,
+    this.isSignificantUpdate = false,
   });
 }

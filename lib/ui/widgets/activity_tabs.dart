@@ -93,6 +93,16 @@ class _UpcomingContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final dropdownTextStyle = Theme.of(context).textTheme.labelSmall?.copyWith(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: colorScheme.onSurface,
+        );
+    final dropdownIcon = Icon(
+      Icons.keyboard_arrow_down,
+      size: 18,
+      color: colorScheme.onSurfaceVariant,
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -106,23 +116,39 @@ class _UpcomingContent extends StatelessWidget {
                   ),
             ),
             const SizedBox(width: 10),
-            DropdownButton<int>(
-              value: selectedDays,
-              items: [
-                for (final days in _ActivityTabsState._filterOptions)
-                  DropdownMenuItem(
-                    value: days,
-                    child: Text('$days days'),
-                  ),
-              ],
-              onChanged: (value) {
-                if (value == null) {
-                  return;
-                }
-                onSelectedDays(value);
-              },
-              dropdownColor: colorScheme.surface,
-              borderRadius: BorderRadius.circular(12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: colorScheme.surfaceVariant,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: colorScheme.outlineVariant),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<int>(
+                  value: selectedDays,
+                  style: dropdownTextStyle,
+                  isDense: true,
+                  icon: dropdownIcon,
+                  items: [
+                    for (final days in _ActivityTabsState._filterOptions)
+                      DropdownMenuItem(
+                        value: days,
+                        child: Text(
+                          '$days days',
+                          style: dropdownTextStyle,
+                        ),
+                      ),
+                  ],
+                  onChanged: (value) {
+                    if (value == null) {
+                      return;
+                    }
+                    onSelectedDays(value);
+                  },
+                  dropdownColor: colorScheme.surface,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
             ),
           ],
         ),
@@ -189,6 +215,12 @@ class _ActivityList extends StatelessWidget {
             ? _formatInterviewTime(item, dateTimeFormat)
             : dateFormat.format(item.timestamp);
         return _ActivityListItem(
+          key: ValueKey(
+            '${item.applicationId ?? ''}'
+            '|${item.timestamp.toIso8601String()}'
+            '|${item.kind.name}'
+            '|${item.title}',
+          ),
           item: item,
           displayTime: displayTime,
           dotColor: _dotColor(item.kind, colorScheme),
@@ -239,6 +271,7 @@ class _ActivityListItem extends StatefulWidget {
   final ValueChanged<ActivityItem>? onItemSelected;
 
   const _ActivityListItem({
+    super.key,
     required this.item,
     required this.displayTime,
     required this.dotColor,
@@ -254,6 +287,27 @@ class _ActivityListItemState extends State<_ActivityListItem> {
   String? _fullBody;
   bool _isLoadingBody = false;
   final _bodyService = BodyRetrievalService();
+
+  bool _isSameItem(ActivityItem a, ActivityItem b) {
+    return a.title == b.title &&
+        a.detail == b.detail &&
+        a.timestamp == b.timestamp &&
+        a.kind == b.kind &&
+        a.applicationId == b.applicationId &&
+        a.timezone == b.timezone &&
+        a.rawBodyText == b.rawBodyText &&
+        a.rawBodyPath == b.rawBodyPath;
+  }
+
+  @override
+  void didUpdateWidget(covariant _ActivityListItem oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!_isSameItem(oldWidget.item, widget.item)) {
+      _isExpanded = false;
+      _isLoadingBody = false;
+      _fullBody = null;
+    }
+  }
 
   bool get _hasBodyContent {
     return widget.item.rawBodyText != null || widget.item.rawBodyPath != null;
